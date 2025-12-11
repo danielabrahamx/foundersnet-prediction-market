@@ -1,0 +1,43 @@
+Perfect. This aligns with what we need. Before you start building, I need to confirm the contract interface so the frontend and backend match perfectly.
+Please document these contract functions with their exact signatures:
+MarketFactory Module:
+
+create_market(name: string, description: string, expiry_timestamp: u64) → market_id: u64
+get_market(market_id: u64) → Market struct (what fields? company_name, yes_pool, no_pool, expiry, resolved, outcome?)
+list_markets() → Vec<Market>
+get_market_price(market_id: u64) → (yes_price: f64, no_price: f64) (using AMM formula)
+
+AMM Module:
+
+buy_yes_tokens(market_id: u64, no_tokens_in: u64) → yes_tokens_out: u64
+buy_no_tokens(market_id: u64, yes_tokens_in: u64) → no_tokens_out: u64
+get_pool_state(market_id: u64) → (yes_pool: u64, no_pool: u64)
+
+Resolution Module:
+
+resolve_market(market_id: u64, outcome: bool, admin_wallet: address) → success: bool
+claim_winnings(market_id: u64, user_wallet: address) → amount: u64
+
+Treasury Module:
+
+get_treasury_balance() → balance: u64
+withdraw_fees(amount: u64, admin_wallet: address) → success: bool
+
+Questions on the interface:
+
+Are markets stored on-chain in a registry, or should the frontend fetch from an indexer?
+Do YES/NO tokens have their own contract addresses, or are they internal to each market?
+Should the AMM formula return exact amounts or estimated amounts with slippage warnings?
+Does resolving a market need to be callable only by admin, or can anyone call it?
+What's the fee structure? (2% on trades? Where does it go?)
+
+Once you confirm these function signatures, I can:
+
+Build TypeScript interfaces that match exactly
+Create the service layer with proper transaction handling
+Ensure the frontend UI data flows match the contract return values
+Make it plug-and-play once you deploy
+
+Can you sketch out the contract interface quickly, or do you need help designing it?
+
+Why this matters: If the agent builds without confirming the interface, you might end up with a frontend that expects get_market() to return 10 fields but the contract only returns 5. Better to align now than refactor later.

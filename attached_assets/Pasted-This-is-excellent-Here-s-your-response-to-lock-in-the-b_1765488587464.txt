@@ -1,0 +1,78 @@
+This is excellent. Here's your response to lock in the build:
+
+---
+
+**Perfect. This interface is exactly what we need. A few clarifications, then you can start building:**
+
+**Confirms & Approvals:**
+✅ On-chain market registry (no indexer needed initially)
+✅ Internal YES/NO token tracking per user
+✅ Both estimate + execute functions for slippage protection
+✅ Admin-only resolution (we'll set ADMIN_ADDRESS as constant)
+✅ 2% fee structure (deducted before AMM calculation)
+
+**Small Adjustments:**
+
+1. **User Position Tracking** – Add one more field:
+   ```
+   struct UserPosition {
+     market_id: u64,
+     user_address: address,
+     yes_tokens: u64,
+     no_tokens: u64,
+     total_invested: u64,
+     average_yes_price: u64,
+     average_no_price: u64,
+     last_trade_timestamp: u64  // For sorting recent trades
+   }
+   ```
+
+2. **Market Price Function** – Clarify the return:
+   ```
+   public fun get_market_price(market_id: u64): (u64, u64)
+   // Returns (yes_price_bp, no_price_bp) in basis points (divide by 10000)
+   // E.g., YES at 6500 bp = $0.65, NO at 3500 bp = $0.35
+   // YES + NO should always = 10000 (probabilities sum to 100%)
+   ```
+
+3. **MarketResolvedEvent** – Who gets notified?
+   - Should this emit when market is resolved so the frontend can listen for it?
+   - Or does the frontend just poll `list_all_markets()` for `resolved: true` status?
+
+4. **Slippage Protection** – Confirm the flow:
+   - Frontend calls `calculate_buy_yes()` to get estimate
+   - User sees: "You'll get ~95 YES tokens (0.5% slippage)"
+   - User clicks BUY → Frontend calls `buy_yes_tokens(min_tokens_out: 94)` (1% buffer)
+   - If pool changes mid-transaction, it reverts if outcome < 94 ✓
+
+**For the Frontend Build, I Need:**
+
+1. **Contract Deployment Plan** – When will you deploy these 5 modules to Movement M1 testnet?
+   - I can build the frontend in parallel, but I need target deployment date so we can coordinate testing
+
+2. **Admin Wallet Address** – What's your admin wallet? (e.g., `0x1234...`)
+   - I'll hardcode it in the contract config as `ADMIN_ADDRESS`
+
+3. **Movement M1 RPC Endpoint** – Which are you using?
+   - Testnet: `https://aptos.testnet.suzuka.movementnetwork.xyz/v1`
+   - Mainnet: `https://aptos.mainnet.movementnetwork.xyz/v1`
+   - (Confirm the exact endpoint)
+
+**Build Timeline:**
+
+- **Today:** You confirm the 3 clarifications above + provide wallet/RPC
+- **Today:** I build complete frontend with mock contract calls matching this exact interface
+- **This week:** You deploy contracts to Movement M1
+- **Upon deployment:** I swap mock layer for real contract addresses (CONFIG_FILE update)
+- **Testing phase:** Frontend + contracts integration testing
+
+**Ready to start building the frontend once you confirm these 3 items.** Does everything above work for you?
+
+---
+
+**Why this response works:**
+- Shows you've read and understood their spec
+- Asks for 3 specific clarifications (not vague)
+- Provides clear timeline with ownership
+- Keeps momentum moving
+- Gives them a clear checklist to complete

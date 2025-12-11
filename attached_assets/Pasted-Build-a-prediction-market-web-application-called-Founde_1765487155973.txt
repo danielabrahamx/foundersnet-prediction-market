@@ -1,0 +1,164 @@
+Build a prediction market web application called "FoundersNet" on Movement M1 blockchain where users trade outcome tokens representing predictions about private company valuations.
+
+TECHNOLOGY STACK:
+- Smart Contracts: Move 2 language on Movement M1 blockchain
+- Frontend: React with TypeScript
+- Wallet: Privy embedded wallet integration
+- Development: Use Movement DeFi Replit template as starting point
+
+START BY:
+1. Import Movement DeFi template from developer.movementnetwork.xyz
+2. Install Privy SDK: npm install @privy-io/react-auth @privy-io/wagmi-connector
+3. Configure Movement M1 network endpoints from Movement Builder Kit
+
+SMART CONTRACT REQUIREMENTS (Move 2):
+
+Module 1 - MarketFactory (sources/market_factory.move):
+- Struct: Market { id, company_name, yes_token_supply, no_token_supply, total_liquidity, resolved, winning_outcome, expiry_timestamp }
+- Function: create_market(company_name: String, initial_liquidity: u64, expiry_timestamp: u64)
+- Function: get_market_details(market_id: u64) returns Market
+- Store markets in global resource MarketRegistry
+
+Module 2 - AMM (sources/amm.move):
+- Implement constant product formula: x * y = k
+- Function: buy_yes_tokens(market_id: u64, move_amount: u64) returns u64 (tokens received)
+- Function: buy_no_tokens(market_id: u64, move_amount: u64) returns u64 (tokens received)
+- Function: sell_yes_tokens(market_id: u64, token_amount: u64) returns u64 (MOVE received)
+- Function: sell_no_tokens(market_id: u64, token_amount: u64) returns u64 (MOVE received)
+- Calculate prices dynamically based on supply ratio
+- Charge 2% fee on each trade, store in treasury
+
+Module 3 - Resolution (sources/resolution.move):
+- Function: resolve_market(market_id: u64, winning_outcome: bool) [admin only]
+- Function: claim_winnings(market_id: u64, user_address: address)
+- Emit event: MarketResolved { market_id, winning_outcome, timestamp }
+- Calculate payouts: winners get proportional share of losing side's liquidity
+
+Module 4 - Treasury (sources/treasury.move):
+- Store all trading fees
+- Function: get_treasury_balance() returns u64
+- Admin withdrawal function for collected fees
+
+FRONTEND REQUIREMENTS (React + TypeScript):
+
+Page 1 - Home/Market List (src/pages/Home.tsx):
+- Display grid of active markets (company cards)
+- Each card shows: company name, current YES price, 24h volume, time until expiry
+- Filter buttons: "Active", "Resolved", "Trending"
+- Search bar to find specific companies
+- "Create Market" button (admin only for MVP)
+
+Page 2 - Trading Interface (src/pages/TradingPage.tsx):
+- Left panel: Company info (name, description, sector, funding history)
+- Center panel: Trading interface
+  - Two tabs: "BUY YES" and "BUY NO"
+  - Input field: Amount of MOVE to spend
+  - Display: Estimated tokens received, current price, price impact
+  - "Execute Trade" button
+  - Show user's current position in this market (YES tokens, NO tokens, cost basis)
+- Right panel: Activity feed (recent trades in this market)
+- Price chart showing YES token price over time (use recharts library)
+
+Page 3 - Portfolio (src/pages/Portfolio.tsx):
+- Table of user's active positions
+- Columns: Company, Position (YES/NO), Tokens Held, Current Value, Unrealized P&L, Actions
+- Section for claimable winnings from resolved markets
+- Total portfolio value and total P&L summary
+
+Components:
+- Navbar (src/components/Navbar.tsx): Logo, nav links, Privy login button, wallet balance
+- MarketCard (src/components/MarketCard.tsx): Reusable card for market list
+- TradeForm (src/components/TradeForm.tsx): Buy/sell interface with price calculation
+- PriceChart (src/components/PriceChart.tsx): Line chart using recharts
+
+BLOCKCHAIN INTEGRATION (src/utils/movement.ts):
+- Use Aptos SDK to interact with Movement M1
+- Configure RPC endpoint: https://mainnet.movementnetwork.xyz/v1 (get actual endpoint from Movement Builder Kit)
+- Functions to export:
+  - connectWallet(): Connect via Privy
+  - getMarkets(): Query all markets from MarketRegistry
+  - getMarketDetails(marketId): Get specific market data
+  - executeBuyYes(marketId, amount): Submit buy transaction
+  - executeBuyNo(marketId, amount): Submit buy transaction
+  - executeSellYes(marketId, amount): Submit sell transaction
+  - executeSellNo(marketId, amount): Submit sell transaction
+  - claimWinnings(marketId): Claim resolved market winnings
+  - getUserPositions(address): Get user's positions across all markets
+
+PRIVY WALLET SETUP (src/App.tsx):
+- Wrap app in PrivyProvider with config:
+  - appId: "clpqhny8d00kgl80fqvul9026" (use Privy docs to get real ID)
+  - config: { appearance: { theme: 'light' }, embeddedWallets: { createOnLogin: 'users-without-wallets' } }
+- Add login button using usePrivy() hook
+- Display connected wallet address when authenticated
+
+STYLING:
+- Use Tailwind CSS for styling
+- Color scheme: Dark blue (#0f172a) primary, Green (#10b981) for YES, Red (#ef4444) for NO
+- Modern financial dashboard aesthetic (think Robinhood/Coinbase)
+- Mobile responsive using Tailwind breakpoints
+
+SAMPLE DATA (Seed 5 Markets):
+1. Market: "SpaceX valuation reaches $200B by Q2 2025", YES price: $0.65, Liquidity: 10,000 MOVE
+2. Market: "OpenAI valued above $150B in next funding round", YES price: $0.72, Liquidity: 15,000 MOVE
+3. Market: "Stripe IPO valuation exceeds $100B", YES price: $0.48, Liquidity: 8,000 MOVE
+4. Market: "Databricks reaches $50B valuation", YES price: $0.55, Liquidity: 12,000 MOVE
+5. Market: "Canva valued above $40B", YES price: $0.61, Liquidity: 9,000 MOVE
+
+DEPLOYMENT:
+- Smart contracts: Deploy to Movement M1 mainnet using Movement CLI
+- Frontend: Deploy on Replit with environment variables for contract addresses
+- Create .env file with: VITE_MARKET_FACTORY_ADDRESS, VITE_AMM_ADDRESS, VITE_MOVEMENT_RPC_URL
+
+TESTING CHECKLIST:
+- User can connect wallet via Privy
+- Market list displays all 5 sample markets
+- User can buy YES tokens (transaction succeeds, balance updates)
+- User can buy NO tokens (transaction succeeds, balance updates)
+- Portfolio shows user's positions correctly
+- Prices update based on AMM formula when trades happen
+
+DOCUMENTATION:
+Create README.md with:
+- Project description and use case
+- How prediction markets work
+- Setup instructions (install deps, deploy contracts, run frontend)
+- Contract addresses on Movement M1 mainnet
+- Architecture diagram (contracts <-> frontend flow)
+- Demo video link placeholder
+
+OUTPUT DELIVERABLES:
+1. Fully functional Move 2 smart contracts deployed to Movement M1
+2. React frontend with Privy wallet integration
+3. Live demo URL on Replit
+4. README with setup instructions
+5. Contract addresses and deployment confirmation
+
+CONSTRAINTS:
+- Complete everything in one session
+- Focus on working MVP over perfect UI
+- Use Movement template to save time
+- Privy handles wallet UX (no custom wallet code)
+- AMM formula must be mathematically correct (test with sample trades)
+- All contract functions must handle errors gracefully
+
+PRIORITIZATION:
+P0 (Must have): Market creation, buy YES/NO tokens, display markets, wallet connection
+P1 (Should have): Portfolio page, price charts, market resolution
+P2 (Nice to have): Activity feed, advanced filters, mobile optimization
+
+Begin implementation now. Start with smart contracts, then frontend, then integration.
+ADDITIONAL CONTEXT FOR REPLIT AGENT
+Movement M1 Specific Details:
+
+Network Chain ID: Check Movement docs (likely different from Aptos mainnet)
+Native token: MOVE (used for gas and trading)
+Block time: ~1 second (fast finality)
+Contract language: Move 2 (enhanced version with new syntax)
+SDK: Use @aptos-labs/ts-sdk version compatible with Movement
+Critical Implementation Notes:
+
+Move 2 Syntax: Resources use struct keyword, functions use public entry for callable transactions
+AMM Math: For buying YES tokens: tokens_out = (move_in * yes_supply) / (liquidity + move_in), adjust NO supply accordingly
+Privy Integration: Must configure Movement M1 as custom chain in Privy config
+State Management: Use React Context for blockchain state (markets, user positions)
