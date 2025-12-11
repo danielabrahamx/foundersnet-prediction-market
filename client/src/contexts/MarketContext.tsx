@@ -1,154 +1,59 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MarketDisplay, UserPositionDisplay, PriceHistory } from "@/types/market";
-import { calculatePrice, bpsToUsd, formatTimeUntilExpiry } from "@/services/amm";
+import { formatTimeUntilExpiry } from "@/services/amm";
+import { useWallet } from "@/contexts/WalletContext";
+import { apiRequest } from "@/lib/queryClient";
+import type { Market, Position } from "@shared/schema";
 
-const MOCK_MARKETS: MarketDisplay[] = [
-  {
-    id: "1",
-    companyName: "SpaceX valuation reaches $200B by Q2 2025",
-    description: "Will SpaceX achieve a $200 billion valuation in their next funding round before July 2025?",
-    yesPriceBps: 6500,
-    noPriceBps: 3500,
-    yesPriceUsd: 0.65,
-    noPriceUsd: 0.35,
-    totalLiquidity: 10000,
-    volume24h: 2450,
-    resolved: false,
-    winningOutcome: false,
-    expiryTimestamp: Date.now() + 120 * 24 * 60 * 60 * 1000,
-    timeUntilExpiry: "120d 0h",
-  },
-  {
-    id: "2",
-    companyName: "OpenAI valued above $150B in next funding round",
-    description: "Will OpenAI's next funding round value the company above $150 billion?",
-    yesPriceBps: 7200,
-    noPriceBps: 2800,
-    yesPriceUsd: 0.72,
-    noPriceUsd: 0.28,
-    totalLiquidity: 15000,
-    volume24h: 5230,
-    resolved: false,
-    winningOutcome: false,
-    expiryTimestamp: Date.now() + 90 * 24 * 60 * 60 * 1000,
-    timeUntilExpiry: "90d 0h",
-  },
-  {
-    id: "3",
-    companyName: "Stripe IPO valuation exceeds $100B",
-    description: "Will Stripe's IPO valuation exceed $100 billion when they go public?",
-    yesPriceBps: 4800,
-    noPriceBps: 5200,
-    yesPriceUsd: 0.48,
-    noPriceUsd: 0.52,
-    totalLiquidity: 8000,
-    volume24h: 1890,
-    resolved: false,
-    winningOutcome: false,
-    expiryTimestamp: Date.now() + 180 * 24 * 60 * 60 * 1000,
-    timeUntilExpiry: "180d 0h",
-  },
-  {
-    id: "4",
-    companyName: "Databricks reaches $50B valuation",
-    description: "Will Databricks achieve a $50 billion valuation before their IPO?",
-    yesPriceBps: 5500,
-    noPriceBps: 4500,
-    yesPriceUsd: 0.55,
-    noPriceUsd: 0.45,
-    totalLiquidity: 12000,
-    volume24h: 3120,
-    resolved: false,
-    winningOutcome: false,
-    expiryTimestamp: Date.now() + 150 * 24 * 60 * 60 * 1000,
-    timeUntilExpiry: "150d 0h",
-  },
-  {
-    id: "5",
-    companyName: "Canva valued above $40B",
-    description: "Will Canva maintain or exceed their $40 billion valuation in the next funding round?",
-    yesPriceBps: 6100,
-    noPriceBps: 3900,
-    yesPriceUsd: 0.61,
-    noPriceUsd: 0.39,
-    totalLiquidity: 9000,
-    volume24h: 1560,
-    resolved: false,
-    winningOutcome: false,
-    expiryTimestamp: Date.now() + 60 * 24 * 60 * 60 * 1000,
-    timeUntilExpiry: "60d 0h",
-  },
-  {
-    id: "6",
-    companyName: "Anthropic reaches $30B valuation",
-    description: "Will Anthropic achieve a $30 billion valuation in 2025?",
-    yesPriceBps: 8200,
-    noPriceBps: 1800,
-    yesPriceUsd: 0.82,
-    noPriceUsd: 0.18,
-    totalLiquidity: 7500,
-    volume24h: 4200,
-    resolved: true,
-    winningOutcome: true,
-    expiryTimestamp: Date.now() - 5 * 24 * 60 * 60 * 1000,
-    timeUntilExpiry: "Resolved",
-  },
-];
+function marketToDisplay(m: Market): MarketDisplay {
+  const total = (m.yesPool || 5000) + (m.noPool || 5000);
+  const yesPriceBps = total > 0 ? Math.round(((m.noPool || 5000) / total) * 10000) : 5000;
+  const noPriceBps = 10000 - yesPriceBps;
+  
+  return {
+    id: m.id,
+    companyName: m.companyName,
+    description: m.description,
+    yesPriceBps,
+    noPriceBps,
+    yesPriceUsd: yesPriceBps / 10000,
+    noPriceUsd: noPriceBps / 10000,
+    totalLiquidity: m.totalLiquidity || 10000,
+    volume24h: m.volume24h || 0,
+    resolved: m.resolved || false,
+    winningOutcome: m.winningOutcome || false,
+    expiryTimestamp: m.expiryTimestamp,
+    timeUntilExpiry: m.resolved ? "Resolved" : formatTimeUntilExpiry(m.expiryTimestamp),
+  };
+}
 
-const MOCK_POSITIONS: UserPositionDisplay[] = [
-  {
-    marketId: "1",
-    companyName: "SpaceX valuation reaches $200B by Q2 2025",
-    yesTokens: 150,
-    noTokens: 0,
-    totalInvested: 85,
-    currentValue: 97.5,
-    unrealizedPnl: 12.5,
-    unrealizedPnlPercent: 14.7,
-    resolved: false,
-    claimable: false,
-    claimableAmount: 0,
-  },
-  {
-    marketId: "2",
-    companyName: "OpenAI valued above $150B in next funding round",
-    yesTokens: 200,
-    noTokens: 0,
-    totalInvested: 120,
-    currentValue: 144,
-    unrealizedPnl: 24,
-    unrealizedPnlPercent: 20,
-    resolved: false,
-    claimable: false,
-    claimableAmount: 0,
-  },
-  {
-    marketId: "3",
-    companyName: "Stripe IPO valuation exceeds $100B",
-    yesTokens: 0,
-    noTokens: 100,
-    totalInvested: 45,
-    currentValue: 52,
-    unrealizedPnl: 7,
-    unrealizedPnlPercent: 15.5,
-    resolved: false,
-    claimable: false,
-    claimableAmount: 0,
-  },
-  {
-    marketId: "6",
-    companyName: "Anthropic reaches $30B valuation",
-    yesTokens: 50,
-    noTokens: 0,
-    totalInvested: 35,
-    currentValue: 50,
-    unrealizedPnl: 15,
-    unrealizedPnlPercent: 42.8,
-    resolved: true,
-    claimable: true,
-    claimableAmount: 50,
-  },
-];
+function positionToDisplay(p: Position, market: MarketDisplay | undefined): UserPositionDisplay {
+  const yesValue = (p.yesTokens || 0) * (market?.yesPriceUsd || 0.5);
+  const noValue = (p.noTokens || 0) * (market?.noPriceUsd || 0.5);
+  const currentValue = yesValue + noValue;
+  const unrealizedPnl = currentValue - (p.totalInvested || 0);
+  const unrealizedPnlPercent = p.totalInvested > 0 ? (unrealizedPnl / p.totalInvested) * 100 : 0;
+  
+  const hasWinningTokens = market?.resolved
+    ? (market.winningOutcome ? (p.yesTokens || 0) > 0 : (p.noTokens || 0) > 0)
+    : false;
+  const winningTokens = market?.winningOutcome ? (p.yesTokens || 0) : (p.noTokens || 0);
+  
+  return {
+    marketId: p.marketId,
+    companyName: market?.companyName || "Unknown Market",
+    yesTokens: p.yesTokens || 0,
+    noTokens: p.noTokens || 0,
+    totalInvested: p.totalInvested || 0,
+    currentValue,
+    unrealizedPnl,
+    unrealizedPnlPercent,
+    resolved: market?.resolved || false,
+    claimable: hasWinningTokens,
+    claimableAmount: hasWinningTokens ? winningTokens : 0,
+  };
+}
 
 function generatePriceHistory(baseYesPrice: number): PriceHistory[] {
   const history: PriceHistory[] = [];
@@ -184,6 +89,7 @@ interface MarketContextType {
   claimWinnings: (marketId: string) => Promise<void>;
   createMarket: (name: string, description: string, liquidity: number, expiry: Date) => Promise<void>;
   resolveMarket: (marketId: string, outcome: boolean) => Promise<void>;
+  seedMarkets: () => Promise<void>;
 }
 
 const MarketContext = createContext<MarketContextType | null>(null);
@@ -201,16 +107,34 @@ interface MarketProviderProps {
 }
 
 export function MarketProvider({ children }: MarketProviderProps) {
-  const [markets, setMarkets] = useState<MarketDisplay[]>(MOCK_MARKETS);
-  const [positions, setPositions] = useState<UserPositionDisplay[]>(MOCK_POSITIONS);
-  const [loading, setLoading] = useState(false);
-  const [priceHistories] = useState<Map<string, PriceHistory[]>>(() => {
-    const map = new Map();
-    MOCK_MARKETS.forEach(m => {
-      map.set(m.id, generatePriceHistory(m.yesPriceBps));
-    });
-    return map;
+  const { address } = useWallet();
+  const queryClient = useQueryClient();
+  const [priceHistories] = useState<Map<string, PriceHistory[]>>(new Map());
+
+  const { data: rawMarkets = [], isLoading: marketsLoading, refetch: refetchMarkets } = useQuery<Market[]>({
+    queryKey: ["/api/markets"],
   });
+
+  const { data: rawPositions = [], isLoading: positionsLoading } = useQuery<Position[]>({
+    queryKey: ["/api/positions", address],
+    enabled: !!address,
+  });
+
+  const markets = rawMarkets.map(marketToDisplay);
+  const positions = rawPositions.map(p => {
+    const market = markets.find(m => m.id === p.marketId);
+    return positionToDisplay(p, market);
+  });
+
+  const loading = marketsLoading || positionsLoading;
+
+  useEffect(() => {
+    markets.forEach(m => {
+      if (!priceHistories.has(m.id)) {
+        priceHistories.set(m.id, generatePriceHistory(m.yesPriceBps));
+      }
+    });
+  }, [markets, priceHistories]);
 
   const getMarket = useCallback((id: string) => {
     return markets.find(m => m.id === id);
@@ -221,113 +145,100 @@ export function MarketProvider({ children }: MarketProviderProps) {
   }, [positions]);
 
   const getPriceHistory = useCallback((marketId: string) => {
+    const market = markets.find(m => m.id === marketId);
+    if (!priceHistories.has(marketId) && market) {
+      priceHistories.set(marketId, generatePriceHistory(market.yesPriceBps));
+    }
     return priceHistories.get(marketId) || [];
-  }, [priceHistories]);
+  }, [markets, priceHistories]);
 
   const refreshMarkets = useCallback(async () => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setMarkets([...MOCK_MARKETS].map(m => ({
-      ...m,
-      timeUntilExpiry: m.resolved ? "Resolved" : formatTimeUntilExpiry(m.expiryTimestamp),
-    })));
-    setLoading(false);
-  }, []);
+    await refetchMarkets();
+  }, [refetchMarkets]);
+
+  const tradeMutation = useMutation({
+    mutationFn: async (trade: { marketId: string; type: "YES" | "NO"; amount: number }) => {
+      const market = getMarket(trade.marketId);
+      const tokensOut = trade.amount / (trade.type === "YES" ? (market?.yesPriceUsd || 0.5) : (market?.noPriceUsd || 0.5));
+      
+      await apiRequest("POST", "/api/trades", {
+        marketId: trade.marketId,
+        userAddress: address,
+        tradeType: trade.type,
+        action: "BUY",
+        moveAmount: Math.round(trade.amount),
+        tokensAmount: Math.round(tokensOut),
+        price: trade.type === "YES" ? (market?.yesPriceBps || 5000) : (market?.noPriceBps || 5000),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/positions", address] });
+      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+    },
+  });
 
   const executeTrade = useCallback(async (marketId: string, type: "YES" | "NO", amount: number) => {
-    console.log(`Executing ${type} trade on market ${marketId} for ${amount} MOVE`);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setPositions(prev => {
-      const existing = prev.find(p => p.marketId === marketId);
-      const market = markets.find(m => m.id === marketId);
-      if (!market) return prev;
-      
-      const tokensReceived = amount / (type === "YES" ? market.yesPriceUsd : market.noPriceUsd);
-      
-      if (existing) {
-        return prev.map(p => p.marketId === marketId ? {
-          ...p,
-          yesTokens: type === "YES" ? p.yesTokens + tokensReceived : p.yesTokens,
-          noTokens: type === "NO" ? p.noTokens + tokensReceived : p.noTokens,
-          totalInvested: p.totalInvested + amount,
-          currentValue: p.currentValue + amount,
-        } : p);
-      } else {
-        return [...prev, {
-          marketId,
-          companyName: market.companyName,
-          yesTokens: type === "YES" ? tokensReceived : 0,
-          noTokens: type === "NO" ? tokensReceived : 0,
-          totalInvested: amount,
-          currentValue: amount,
-          unrealizedPnl: 0,
-          unrealizedPnlPercent: 0,
-          resolved: false,
-          claimable: false,
-          claimableAmount: 0,
-        }];
-      }
-    });
-  }, [markets]);
+    await tradeMutation.mutateAsync({ marketId, type, amount });
+  }, [tradeMutation]);
 
   const claimWinnings = useCallback(async (marketId: string) => {
     console.log(`Claiming winnings from market ${marketId}`);
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setPositions(prev => prev.map(p => p.marketId === marketId ? {
-      ...p,
-      claimable: false,
-      claimableAmount: 0,
-    } : p));
-  }, []);
+    queryClient.invalidateQueries({ queryKey: ["/api/positions", address] });
+  }, [address, queryClient]);
+
+  const createMarketMutation = useMutation({
+    mutationFn: async (data: { name: string; description: string; liquidity: number; expiry: Date }) => {
+      await apiRequest("POST", "/api/markets", {
+        companyName: data.name,
+        description: data.description,
+        yesPool: Math.round(data.liquidity / 2),
+        noPool: Math.round(data.liquidity / 2),
+        totalLiquidity: data.liquidity,
+        volume24h: 0,
+        resolved: false,
+        expiryTimestamp: data.expiry.getTime(),
+        creator: address,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+    },
+  });
 
   const createMarket = useCallback(async (name: string, description: string, liquidity: number, expiry: Date) => {
-    console.log(`Creating market: ${name}`);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const newMarket: MarketDisplay = {
-      id: String(markets.length + 1),
-      companyName: name,
-      description,
-      yesPriceBps: 5000,
-      noPriceBps: 5000,
-      yesPriceUsd: 0.50,
-      noPriceUsd: 0.50,
-      totalLiquidity: liquidity,
-      volume24h: 0,
-      resolved: false,
-      winningOutcome: false,
-      expiryTimestamp: expiry.getTime(),
-      timeUntilExpiry: formatTimeUntilExpiry(expiry.getTime()),
-    };
-    
-    setMarkets(prev => [...prev, newMarket]);
-  }, [markets.length]);
+    await createMarketMutation.mutateAsync({ name, description, liquidity, expiry });
+  }, [createMarketMutation]);
+
+  const resolveMarketMutation = useMutation({
+    mutationFn: async (data: { marketId: string; outcome: boolean }) => {
+      await apiRequest("POST", `/api/markets/${data.marketId}/resolve`, {
+        adminAddress: address,
+        winningOutcome: data.outcome,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/positions", address] });
+    },
+  });
 
   const resolveMarket = useCallback(async (marketId: string, outcome: boolean) => {
-    console.log(`Resolving market ${marketId} with outcome: ${outcome ? "YES" : "NO"}`);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setMarkets(prev => prev.map(m => m.id === marketId ? {
-      ...m,
-      resolved: true,
-      winningOutcome: outcome,
-      timeUntilExpiry: "Resolved",
-    } : m));
-    
-    setPositions(prev => prev.map(p => {
-      if (p.marketId !== marketId) return p;
-      const hasWinningTokens = outcome ? p.yesTokens > 0 : p.noTokens > 0;
-      const winningTokens = outcome ? p.yesTokens : p.noTokens;
-      return {
-        ...p,
-        resolved: true,
-        claimable: hasWinningTokens,
-        claimableAmount: winningTokens,
-      };
-    }));
-  }, []);
+    await resolveMarketMutation.mutateAsync({ marketId, outcome });
+  }, [resolveMarketMutation]);
+
+  const seedMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/seed", { adminAddress: address });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+    },
+  });
+
+  const seedMarkets = useCallback(async () => {
+    await seedMutation.mutateAsync();
+  }, [seedMutation]);
 
   return (
     <MarketContext.Provider
@@ -343,6 +254,7 @@ export function MarketProvider({ children }: MarketProviderProps) {
         claimWinnings,
         createMarket,
         resolveMarket,
+        seedMarkets,
       }}
     >
       {children}

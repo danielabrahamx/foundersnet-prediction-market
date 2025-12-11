@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
+import { AptosWalletAdapterProvider } from "@aptos-labs/wallet-adapter-react";
+import { Network } from "@aptos-labs/ts-sdk";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { MarketProvider } from "@/contexts/MarketContext";
 import { Navbar } from "@/components/Navbar";
@@ -51,19 +53,25 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WalletProvider>
-          <MarketProvider>
-            <div className="min-h-screen bg-background text-foreground">
-              <Navbar theme={theme} onToggleTheme={toggleTheme} />
-              <main className="max-w-7xl mx-auto px-4 py-6">
-                <Router />
-              </main>
-            </div>
-            <Toaster />
-          </MarketProvider>
-        </WalletProvider>
-      </TooltipProvider>
+      <AptosWalletAdapterProvider
+        autoConnect={true}
+        dappConfig={{ network: Network.TESTNET }}
+        onError={(error) => console.error("Wallet error:", error)}
+      >
+        <TooltipProvider>
+          <WalletProvider>
+            <MarketProvider>
+              <div className="min-h-screen bg-background text-foreground">
+                <Navbar theme={theme} onToggleTheme={toggleTheme} />
+                <main className="max-w-7xl mx-auto px-4 py-6">
+                  <Router />
+                </main>
+              </div>
+              <Toaster />
+            </MarketProvider>
+          </WalletProvider>
+        </TooltipProvider>
+      </AptosWalletAdapterProvider>
     </QueryClientProvider>
   );
 }

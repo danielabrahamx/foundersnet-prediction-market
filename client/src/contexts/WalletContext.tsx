@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { CONTRACT_CONFIG } from "@/config/contracts";
+import { useWallet as useAptosWallet } from "@aptos-labs/wallet-adapter-react";
 
 interface WalletContextType {
   connected: boolean;
@@ -26,43 +27,52 @@ interface WalletProviderProps {
 }
 
 export function WalletProvider({ children }: WalletProviderProps) {
-  const [connected, setConnected] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
+  const aptosWallet = useAptosWallet();
   const [balance, setBalance] = useState(0);
 
+  const connected = aptosWallet.connected;
+  const address = aptosWallet.account?.address?.toString() || null;
   const isAdmin = address?.toLowerCase() === CONTRACT_CONFIG.adminAddress.toLowerCase();
+
+  useEffect(() => {
+    if (connected) {
+      setBalance(1000);
+    } else {
+      setBalance(0);
+    }
+  }, [connected]);
 
   const connect = useCallback(async () => {
     try {
-      if (typeof window !== "undefined" && "aptos" in window) {
-        const petra = (window as { aptos?: { connect: () => Promise<{ address: string }> } }).aptos;
-        if (petra) {
-          const response = await petra.connect();
-          setAddress(response.address);
-          setConnected(true);
-          setBalance(1000);
-          console.log("Wallet connected:", response.address);
+      const wallets = aptosWallet.wallets;
+      if (wallets && wallets.length > 0) {
+        const petraWallet = wallets.find(w => 
+          w.name.toLowerCase().includes("petra")
+        );
+        
+        if (petraWallet) {
+          await aptosWallet.connect(petraWallet.name);
+          console.log("Petra wallet connected");
           return;
         }
+        
+        await aptosWallet.connect(wallets[0].name);
+        console.log("Wallet connected:", wallets[0].name);
+      } else {
+        console.warn("No wallets detected, using mock mode");
+        setBalance(1000);
       }
-      
-      const mockAddress = CONTRACT_CONFIG.adminAddress;
-      setAddress(mockAddress);
-      setConnected(true);
-      setBalance(1000);
-      console.log("Mock wallet connected:", mockAddress);
     } catch (error) {
       console.error("Failed to connect wallet:", error);
       throw error;
     }
-  }, []);
+  }, [aptosWallet]);
 
   const disconnect = useCallback(() => {
-    setConnected(false);
-    setAddress(null);
+    aptosWallet.disconnect();
     setBalance(0);
     console.log("Wallet disconnected");
-  }, []);
+  }, [aptosWallet]);
 
   const signAndSubmitTransaction = useCallback(async (payload: unknown): Promise<{ hash: string }> => {
     if (!connected) {
@@ -72,10 +82,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
     console.log("Signing transaction:", payload);
     
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
     const hash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-    console.log("Transaction submitted:", hash);
-    
+    console.log("Mock transaction hash:", hash);
     return { hash };
   }, [connected]);
 
