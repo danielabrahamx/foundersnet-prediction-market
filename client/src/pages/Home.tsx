@@ -44,10 +44,10 @@ export default function Home() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">
-          Prediction Markets
+          Prediction Markets for startup valuations.
         </h1>
         <p className="text-muted-foreground">
-          Trade on private company valuations using outcome tokens
+          The closest thing to trading in private companies' shares.
         </p>
       </div>
 
