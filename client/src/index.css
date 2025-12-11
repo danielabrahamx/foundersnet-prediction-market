@@ -43,9 +43,13 @@
   --chart-3: 0 84% 48%;
   --chart-4: 262 83% 58%;
   --chart-5: 43 96% 56%;
-  --font-sans: Open Sans, sans-serif;
+  --yes: 160 84% 39%;
+  --yes-foreground: 160 10% 98%;
+  --no: 0 84% 60%;
+  --no-foreground: 0 10% 98%;
+  --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
+  --font-mono: JetBrains Mono, monospace;
   --radius: .5rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(220 13% 91% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(220 13% 91% / 0.00);
@@ -127,6 +131,10 @@
   --chart-3: 0 84% 60%;
   --chart-4: 262 83% 65%;
   --chart-5: 43 96% 65%;
+  --yes: 160 84% 45%;
+  --yes-foreground: 160 10% 98%;
+  --no: 0 84% 55%;
+  --no-foreground: 0 10% 98%;
   --shadow-2xs: 0px 2px 0px 0px hsl(220 13% 10% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(220 13% 10% / 0.00);
   --shadow-sm: 0px 2px 0px 0px hsl(220 13% 10% / 0.00), 0px 1px 2px -1px hsl(220 13% 10% / 0.00);
