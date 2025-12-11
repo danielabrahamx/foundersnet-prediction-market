@@ -47,6 +47,14 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const wallets = aptosWallet.wallets;
       console.log("Available wallets:", wallets?.map(w => w.name));
       
+      // Check if we're in an iframe (Replit webview)
+      const isInIframe = window !== window.top;
+      if (isInIframe) {
+        console.log("Detected iframe - opening in new window for wallet connection");
+        window.open(window.location.href, "_blank");
+        return;
+      }
+      
       if (wallets && wallets.length > 0) {
         const petraWallet = wallets.find(w => 
           w.name.toLowerCase().includes("petra")
