@@ -45,22 +45,26 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const connect = useCallback(async () => {
     try {
       const wallets = aptosWallet.wallets;
+      console.log("Available wallets:", wallets?.map(w => w.name));
+      
       if (wallets && wallets.length > 0) {
         const petraWallet = wallets.find(w => 
           w.name.toLowerCase().includes("petra")
         );
         
         if (petraWallet) {
+          console.log("Connecting to Petra wallet...");
           await aptosWallet.connect(petraWallet.name);
-          console.log("Petra wallet connected");
+          console.log("Petra wallet connected successfully");
           return;
         }
         
+        console.log("Connecting to first available wallet:", wallets[0].name);
         await aptosWallet.connect(wallets[0].name);
         console.log("Wallet connected:", wallets[0].name);
       } else {
-        console.warn("No wallets detected, using mock mode");
-        setBalance(1000);
+        console.warn("No wallet extensions detected. Please install Petra wallet.");
+        window.open("https://petra.app/", "_blank");
       }
     } catch (error) {
       console.error("Failed to connect wallet:", error);
