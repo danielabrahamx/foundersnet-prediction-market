@@ -91,13 +91,18 @@ export function WalletProvider({ children }: WalletProviderProps) {
       throw new Error("Wallet not connected");
     }
     
-    console.log("Signing transaction:", payload);
+    console.log("Submitting transaction:", payload);
     
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const hash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-    console.log("Mock transaction hash:", hash);
-    return { hash };
-  }, [connected]);
+    try {
+      // Use the real wallet adapter signAndSubmitTransaction
+      const response = await aptosWallet.signAndSubmitTransaction(payload as Parameters<typeof aptosWallet.signAndSubmitTransaction>[0]);
+      console.log("Transaction submitted:", response);
+      return { hash: response.hash };
+    } catch (error) {
+      console.error("Transaction failed:", error);
+      throw error;
+    }
+  }, [connected, aptosWallet]);
 
   return (
     <WalletContext.Provider

@@ -14,6 +14,8 @@ import TradingPage from "@/pages/TradingPage";
 import Portfolio from "@/pages/Portfolio";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
+import { isContractsDeployed } from "@/config/contracts";
+import { AlertTriangle } from "lucide-react";
 
 function Router() {
   return (
@@ -62,6 +64,14 @@ function App() {
           <WalletProvider>
             <MarketProvider>
               <div className="min-h-screen bg-background text-foreground">
+                {!isContractsDeployed() && (
+                  <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2">
+                    <div className="max-w-7xl mx-auto flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Simulation Mode - Smart contracts not deployed. Trades are stored locally.</span>
+                    </div>
+                  </div>
+                )}
                 <Navbar theme={theme} onToggleTheme={toggleTheme} />
                 <main className="max-w-7xl mx-auto px-4 py-6">
                   <Router />
