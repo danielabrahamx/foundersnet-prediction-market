@@ -1,0 +1,12 @@
+{
+  "network": "movement-testnet",
+  "rpcUrl": "",
+  "packageAddress": "",
+  "registryAddress": "",
+  "resourceAddress": "",
+  "namedAddresses": {
+    "prediction_market": ""
+  },
+  "resourceSeedHex": "01",
+  "publishedAt": ""
+}
