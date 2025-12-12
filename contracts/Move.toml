@@ -1,0 +1,12 @@
+[package]
+name = "PredictionMarket"
+version = "1.0.0"
+authors = ["FoundersNet"]
+
+[addresses]
+prediction_market = "5bf2c4dde989ae89042eba11691e76407d129f9a06eb90eafee5bcaead2df58e"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "aptos-node-v1.14.0"
+subdir = "aptos-move/framework/aptos-framework"
