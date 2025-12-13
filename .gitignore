@@ -4,6 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env
+.env.local
+.env.*.local
 
 # Aptos / Move build artifacts
 .aptos
