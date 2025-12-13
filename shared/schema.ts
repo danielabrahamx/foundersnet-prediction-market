@@ -1,82 +1,98 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, bigint, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// User types
+export const insertUserSchema = z.object({
+  username: z.string(),
+  password: z.string(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 
-export const markets = pgTable("markets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyName: text("company_name").notNull(),
-  description: text("description").notNull(),
-  yesPool: bigint("yes_pool", { mode: "number" }).notNull().default(5000),
-  noPool: bigint("no_pool", { mode: "number" }).notNull().default(5000),
-  totalLiquidity: bigint("total_liquidity", { mode: "number" }).notNull().default(10000),
-  volume24h: bigint("volume_24h", { mode: "number" }).notNull().default(0),
-  resolved: boolean("resolved").notNull().default(false),
-  winningOutcome: boolean("winning_outcome").default(false),
-  expiryTimestamp: bigint("expiry_timestamp", { mode: "number" }).notNull(),
-  creator: text("creator").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export interface User {
+  id: string;
+  username: string;
+  password: string;
+}
 
-export const insertMarketSchema = createInsertSchema(markets).omit({
-  id: true,
-  createdAt: true,
+// Market types
+export const insertMarketSchema = z.object({
+  companyName: z.string(),
+  description: z.string(),
+  yesPool: z.number().optional().default(5000),
+  noPool: z.number().optional().default(5000),
+  totalLiquidity: z.number().optional().default(10000),
+  volume24h: z.number().optional().default(0),
+  resolved: z.boolean().optional().default(false),
+  winningOutcome: z.boolean().optional().nullable(),
+  expiryTimestamp: z.number(),
+  creator: z.string(),
 });
 
 export type InsertMarket = z.infer<typeof insertMarketSchema>;
-export type Market = typeof markets.$inferSelect;
 
-export const positions = pgTable("positions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  marketId: varchar("market_id").notNull().references(() => markets.id),
-  userAddress: text("user_address").notNull(),
-  yesTokens: bigint("yes_tokens", { mode: "number" }).notNull().default(0),
-  noTokens: bigint("no_tokens", { mode: "number" }).notNull().default(0),
-  totalInvested: bigint("total_invested", { mode: "number" }).notNull().default(0),
-  averageYesPrice: integer("average_yes_price").notNull().default(5000),
-  averageNoPrice: integer("average_no_price").notNull().default(5000),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export interface Market {
+  id: string;
+  companyName: string;
+  description: string;
+  yesPool: number;
+  noPool: number;
+  totalLiquidity: number;
+  volume24h: number;
+  resolved: boolean;
+  winningOutcome: boolean | null;
+  expiryTimestamp: number;
+  creator: string;
+  createdAt: Date;
+}
 
-export const insertPositionSchema = createInsertSchema(positions).omit({
-  id: true,
-  updatedAt: true,
+// Position types
+export const insertPositionSchema = z.object({
+  marketId: z.string(),
+  userAddress: z.string(),
+  yesTokens: z.number().optional().default(0),
+  noTokens: z.number().optional().default(0),
+  totalInvested: z.number().optional().default(0),
+  averageYesPrice: z.number().optional().default(5000),
+  averageNoPrice: z.number().optional().default(5000),
 });
 
 export type InsertPosition = z.infer<typeof insertPositionSchema>;
-export type Position = typeof positions.$inferSelect;
 
-export const trades = pgTable("trades", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  marketId: varchar("market_id").notNull().references(() => markets.id),
-  userAddress: text("user_address").notNull(),
-  tradeType: text("trade_type").notNull(),
-  action: text("action").notNull(),
-  moveAmount: bigint("move_amount", { mode: "number" }).notNull(),
-  tokensAmount: bigint("tokens_amount", { mode: "number" }).notNull(),
-  price: integer("price").notNull(),
-  txHash: text("tx_hash"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export interface Position {
+  id: string;
+  marketId: string;
+  userAddress: string;
+  yesTokens: number;
+  noTokens: number;
+  totalInvested: number;
+  averageYesPrice: number;
+  averageNoPrice: number;
+  updatedAt: Date;
+}
 
-export const insertTradeSchema = createInsertSchema(trades).omit({
-  id: true,
-  createdAt: true,
+// Trade types
+export const insertTradeSchema = z.object({
+  marketId: z.string(),
+  userAddress: z.string(),
+  tradeType: z.string(),
+  action: z.string(),
+  moveAmount: z.number(),
+  tokensAmount: z.number(),
+  price: z.number(),
+  txHash: z.string().optional(),
 });
 
 export type InsertTrade = z.infer<typeof insertTradeSchema>;
-export type Trade = typeof trades.$inferSelect;
+
+export interface Trade {
+  id: string;
+  marketId: string;
+  userAddress: string;
+  tradeType: string;
+  action: string;
+  moveAmount: number;
+  tokensAmount: number;
+  price: number;
+  txHash?: string;
+  createdAt: Date;
+}
