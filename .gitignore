@@ -7,3 +7,8 @@ vite.config.ts.*
 .env
 .env.local
 .env.*.local
+
+# Aptos / Move build artifacts
+.aptos
+contracts/.aptos
+contracts/build

@@ -8,7 +8,9 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "move:test": "tsx scripts/move-test.ts",
+    "move:deploy:movement": "tsx scripts/deploy-movement.ts"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^1.39.0",

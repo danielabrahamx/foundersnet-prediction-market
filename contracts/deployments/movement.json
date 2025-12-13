@@ -4,4 +4,14 @@
   "marketStorageAddress": "0x0",
   "network": "movement_testnet",
   "deployedAt": "2024-01-01T00:00:00Z"
+  "network": "movement-testnet",
+  "rpcUrl": "",
+  "packageAddress": "",
+  "registryAddress": "",
+  "resourceAddress": "",
+  "namedAddresses": {
+    "prediction_market": ""
+  },
+  "resourceSeedHex": "01",
+  "publishedAt": ""
 }
