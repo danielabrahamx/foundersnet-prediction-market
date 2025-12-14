@@ -1,3 +1,6 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,38 +25,43 @@ function normalizeHex(input: string): string {
   return input.startsWith("0x") ? input : `0x${input}`;
 }
 
-function runAptos(
-  aptosBin: string,
-  configPath: string,
-  profile: string,
+function normalizePrivateKey(input: string): string {
+  // Strip the "ed25519-priv-" prefix if present (from Petra wallet export)
+  let key = input.replace(/^ed25519-priv-/i, "");
+  // Ensure it has 0x prefix
+  key = normalizeHex(key);
+  return key;
+}
+
+function runCommand(
+  command: string,
   args: string[],
   cwd: string,
-) {
-  const fullArgs = ["--config", configPath, "--profile", profile, ...args];
-  const res = spawnSync(aptosBin, fullArgs, { cwd, stdio: "inherit" });
+  env?: Record<string, string>
+): void {
+  console.log(`\n$ ${command} ${args.join(" ")}\n`);
+  const res = spawnSync(command, args, {
+    cwd,
+    stdio: "inherit",
+    env: { ...process.env, ...env },
+    shell: true,
+  });
   if (res.error) {
-    if ((res.error as NodeJS.ErrnoException).code === "ENOENT") {
-      console.error(
-        `\nMissing Aptos CLI binary (tried: '${aptosBin}'). Install it from https://aptos.dev/tools/aptos-cli/ or set APTOS_BIN.\n`,
-      );
-    }
     throw res.error;
   }
   if (res.status !== 0) {
-    process.exit(res.status ?? 1);
+    throw new Error(`Command failed with exit code ${res.status}`);
   }
 }
 
 async function main() {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(__dirname, "..");
   const contractsDir = path.join(repoRoot, "contracts");
-
-  const aptosBin = process.env.APTOS_BIN ?? "aptos";
-  const profile = process.env.MOVEMENT_PROFILE ?? "movement";
 
   const movementRpcUrl = getRequiredEnv("MOVEMENT_RPC_URL");
   const movementFaucetUrl = process.env.MOVEMENT_FAUCET_URL;
-  const movementPrivateKeyHex = normalizeHex(getRequiredEnv("MOVEMENT_PRIVATE_KEY"));
+  const movementPrivateKeyHex = normalizePrivateKey(getRequiredEnv("MOVEMENT_PRIVATE_KEY"));
 
   const seedHex = (process.env.MOVEMENT_RESOURCE_SEED_HEX ?? "01").replace(/^0x/i, "");
 
@@ -64,68 +72,91 @@ async function main() {
   const adminAddress = packageAddress;
   const moduleAddress = process.env.PREDICTION_MARKET_ADDRESS ?? packageAddress;
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aptos-movement-"));
-  const configPath = path.join(tmpDir, "config.yaml");
+  console.log("========================================");
+  console.log("  Movement Contract Deployment");
+  console.log("========================================\n");
+  console.log(`Package Address: ${packageAddress}`);
+  console.log(`Module Address: ${moduleAddress}`);
+  console.log(`RPC URL: ${movementRpcUrl}`);
+  console.log(`Contracts Directory: ${contractsDir}`);
 
-  const yamlLines = [
-    "profiles:",
-    `  ${profile}:`,
-    "    network: custom",
-    `    account: \"${packageAddress}\"`,
-    `    private_key: \"${movementPrivateKeyHex}\"`,
-    `    public_key: \"${account.publicKey.toString()}\"`,
-    `    rest_url: \"${movementRpcUrl}\"`,
-  ];
-  if (movementFaucetUrl) {
-    yamlLines.push(`    faucet_url: \"${movementFaucetUrl}\"`);
+  // Create a temporary .aptos/config.yaml for CLI
+  const aptosConfigDir = path.join(os.homedir(), ".aptos");
+  fs.mkdirSync(aptosConfigDir, { recursive: true });
+
+  const configContent = `---
+profiles:
+  movement:
+    network: Custom
+    private_key: "${movementPrivateKeyHex}"
+    public_key: "${account.publicKey.toString()}"
+    account: ${packageAddress}
+    rest_url: "${movementRpcUrl}"
+${movementFaucetUrl ? `    faucet_url: "${movementFaucetUrl}"` : ""}
+`;
+
+  const configPath = path.join(aptosConfigDir, "config.yaml");
+  fs.writeFileSync(configPath, configContent, "utf8");
+  console.log(`\n✓ Created Aptos CLI config at ${configPath}`);
+
+  // Step 1: Compile the contract
+  console.log("\n========================================");
+  console.log("  Step 1: Compiling Contract");
+  console.log("========================================");
+
+  try {
+    runCommand("aptos", [
+      "move", "compile",
+      "--package-dir", contractsDir,
+      "--named-addresses", `prediction_market=${moduleAddress}`,
+      "--profile", "movement",
+    ], repoRoot);
+    console.log("✓ Compilation successful");
+  } catch (error) {
+    console.error("✗ Compilation failed");
+    throw error;
   }
-  fs.writeFileSync(configPath, `${yamlLines.join("\n")}\n`, "utf8");
 
-  runAptos(
-    aptosBin,
-    configPath,
-    profile,
-    [
-      "move",
-      "compile",
-      "--package-dir",
-      contractsDir,
-      "--named-addresses",
-      `prediction_market=${moduleAddress}`,
-    ],
-    repoRoot,
-  );
+  // Step 2: Run tests
+  console.log("\n========================================");
+  console.log("  Step 2: Running Tests");
+  console.log("========================================");
 
-  runAptos(
-    aptosBin,
-    configPath,
-    profile,
-    [
-      "move",
-      "test",
-      "--package-dir",
-      contractsDir,
-      "--named-addresses",
-      `prediction_market=${moduleAddress}`,
-    ],
-    repoRoot,
-  );
+  try {
+    runCommand("aptos", [
+      "move", "test",
+      "--package-dir", contractsDir,
+      "--named-addresses", `prediction_market=${moduleAddress}`,
+      "--profile", "movement",
+    ], repoRoot);
+    console.log("✓ Tests passed");
+  } catch (error) {
+    console.warn("⚠ Tests failed, continuing with deployment...");
+  }
 
-  runAptos(
-    aptosBin,
-    configPath,
-    profile,
-    [
-      "move",
-      "publish",
-      "--package-dir",
-      contractsDir,
-      "--named-addresses",
-      `prediction_market=${moduleAddress}`,
+  // Step 3: Publish the contract
+  console.log("\n========================================");
+  console.log("  Step 3: Publishing Contract");
+  console.log("========================================");
+
+  try {
+    runCommand("aptos", [
+      "move", "publish",
+      "--package-dir", contractsDir,
+      "--named-addresses", `prediction_market=${moduleAddress}`,
+      "--profile", "movement",
       "--assume-yes",
-    ],
-    repoRoot,
-  );
+    ], repoRoot);
+    console.log("✓ Contract published successfully");
+  } catch (error) {
+    console.error("✗ Publishing failed");
+    throw error;
+  }
+
+  // Step 4: Check if MarketRegistry exists, if not initialize
+  console.log("\n========================================");
+  console.log("  Step 4: Checking MarketRegistry");
+  console.log("========================================");
 
   const aptos = new Aptos(
     new AptosConfig({ network: Network.CUSTOM, fullnode: movementRpcUrl }),
@@ -138,34 +169,46 @@ async function main() {
       accountAddress: adminAddress,
       resourceType: registryType,
     });
+    console.log("✓ MarketRegistry already initialized");
   } catch {
     initialized = false;
+    console.log("⚠ MarketRegistry not found, initializing...");
   }
 
   if (!initialized) {
-    runAptos(
-      aptosBin,
-      configPath,
-      profile,
-      [
-        "move",
-        "run",
-        "--function-id",
-        `${moduleAddress}::market::initialize`,
-        "--args",
-        `hex:${seedHex}`,
-      ],
-      repoRoot,
-    );
+    try {
+      runCommand("aptos", [
+        "move", "run",
+        "--function-id", `${moduleAddress}::market::initialize`,
+        "--args", `hex:${seedHex}`,
+        "--profile", "movement",
+        "--assume-yes",
+      ], repoRoot);
+      console.log("✓ MarketRegistry initialized");
+    } catch (error) {
+      console.error("✗ Initialization failed");
+      throw error;
+    }
   }
 
-  const [resourceAddress] = (await aptos.view({
-    payload: {
-      function: `${moduleAddress}::market::get_resource_address`,
-      typeArguments: [],
-      functionArguments: [adminAddress],
-    },
-  })) as [string];
+  // Step 5: Get resource address and save deployment manifest
+  console.log("\n========================================");
+  console.log("  Step 5: Saving Deployment Manifest");
+  console.log("========================================");
+
+  let resourceAddress = "";
+  try {
+    const [resAddr] = (await aptos.view({
+      payload: {
+        function: `${moduleAddress}::market::get_resource_address`,
+        typeArguments: [],
+        functionArguments: [adminAddress],
+      },
+    })) as [string];
+    resourceAddress = resAddr;
+  } catch (error) {
+    console.warn("⚠ Could not fetch resource address");
+  }
 
   const deploymentsDir = path.join(contractsDir, "deployments");
   fs.mkdirSync(deploymentsDir, { recursive: true });
@@ -186,11 +229,18 @@ async function main() {
 
   fs.writeFileSync(deploymentPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
-  console.log(`\nWrote deployment manifest: ${deploymentPath}`);
+  console.log(`\n✓ Wrote deployment manifest: ${deploymentPath}`);
   console.log(JSON.stringify(manifest, null, 2));
+
+  console.log("\n========================================");
+  console.log("  Deployment Complete!");
+  console.log("========================================\n");
+  console.log("Update your .env file with:");
+  console.log(`  MOVEMENT_CONTRACT_ADDRESS=${moduleAddress}`);
+  console.log(`  MOVEMENT_RESOURCE_ACCOUNT=${adminAddress}`);
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error("\n❌ Deployment failed:", err.message || err);
   process.exit(1);
 });

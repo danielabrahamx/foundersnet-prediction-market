@@ -28,10 +28,10 @@ export function TradeForm({ market }: TradeFormProps) {
 
   const estimate = useMemo(() => {
     if (numAmount <= 0) return null;
-    
+
     const yesPool = market.totalLiquidity * (market.noPriceBps / 10000);
     const noPool = market.totalLiquidity * (market.yesPriceBps / 10000);
-    
+
     return tradeType === "YES"
       ? calculateBuyYes(yesPool, noPool, numAmount)
       : calculateBuyNo(yesPool, noPool, numAmount);
@@ -53,7 +53,7 @@ export function TradeForm({ market }: TradeFormProps) {
     }
 
     setTxState({ status: "pending" });
-    
+
     try {
       await executeTrade(market.id, tradeType, numAmount);
       setTxState({ status: "confirmed" });
@@ -125,7 +125,7 @@ export function TradeForm({ market }: TradeFormProps) {
           <TabsContent value={tradeType} className="space-y-4 mt-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="amount">Amount (MOVE)</Label>
+                <Label htmlFor="amount">Amount (APT)</Label>
                 <button
                   type="button"
                   onClick={handleMaxClick}
@@ -163,7 +163,7 @@ export function TradeForm({ market }: TradeFormProps) {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Fee (2%)</span>
-                    <span className="font-mono">{estimate.fee.toFixed(2)} MOVE</span>
+                    <span className="font-mono">{estimate.fee.toFixed(2)} APT</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Price impact</span>

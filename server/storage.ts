@@ -3,7 +3,7 @@ import {
   type Market, type InsertMarket,
   type Position, type InsertPosition,
   type Trade, type InsertTrade,
-} from "@shared/schema";
+} from "../shared/schema.js";
 import { randomUUID } from "crypto";
 
 export interface IStorage {

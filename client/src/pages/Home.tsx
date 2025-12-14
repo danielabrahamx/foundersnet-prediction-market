@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MarketCard } from "@/components/MarketCard";
-import { MarketFilters } from "@/components/MarketFilters";
+import { MarketFilters, type MarketSort } from "@/components/MarketFilters";
 import { useMarkets } from "@/contexts/MarketContext";
 import { useWallet } from "@/contexts/WalletContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,11 +69,13 @@ export default function Home() {
   const { markets, loading, seedMarkets } = useMarkets();
   const { isAdmin } = useWallet();
   const [activeFilter, setActiveFilter] = useState<MarketFilter>("active");
+  const [activeSort, setActiveSort] = useState<MarketSort>("newest");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredMarkets = useMemo(() => {
+  const filteredAndSortedMarkets = useMemo(() => {
     let result = markets;
 
+    // Apply filter
     switch (activeFilter) {
       case "active":
         result = result.filter((m) => !m.resolved);
@@ -89,6 +91,7 @@ export default function Home() {
         break;
     }
 
+    // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -98,8 +101,24 @@ export default function Home() {
       );
     }
 
+    // Apply sorting (except for trending which has its own sort)
+    if (activeFilter !== "trending") {
+      result = [...result].sort((a, b) => {
+        switch (activeSort) {
+          case "newest":
+            return b.expiryTimestamp - a.expiryTimestamp;
+          case "liquidity":
+            return b.totalLiquidity - a.totalLiquidity;
+          case "volume":
+            return b.volume24h - a.volume24h;
+          default:
+            return 0;
+        }
+      });
+    }
+
     return result;
-  }, [markets, activeFilter, searchQuery]);
+  }, [markets, activeFilter, activeSort, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -115,6 +134,8 @@ export default function Home() {
       <MarketFilters
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
+        activeSort={activeSort}
+        onSortChange={setActiveSort}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
@@ -125,7 +146,7 @@ export default function Home() {
             <Skeleton key={i} className="h-[220px] rounded-xl" />
           ))}
         </div>
-      ) : filteredMarkets.length === 0 ? (
+      ) : filteredAndSortedMarkets.length === 0 ? (
         <EmptyState
           searchQuery={searchQuery}
           onSeed={seedMarkets}
@@ -133,7 +154,7 @@ export default function Home() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMarkets.map((market) => (
+          {filteredAndSortedMarkets.map((market) => (
             <MarketCard key={market.id} market={market} />
           ))}
         </div>

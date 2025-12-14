@@ -63,7 +63,7 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Value</p>
             <p className="text-2xl font-mono font-bold" data-testid="text-total-value">
-              {totalValue.toLocaleString()} MOVE
+              {totalValue.toLocaleString()} APT
             </p>
           </CardContent>
         </Card>
@@ -71,9 +71,8 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total P&L</p>
             <p
-              className={`text-2xl font-mono font-bold flex items-center gap-1 ${
-                totalPnl >= 0 ? "text-yes" : "text-no"
-              }`}
+              className={`text-2xl font-mono font-bold flex items-center gap-1 ${totalPnl >= 0 ? "text-yes" : "text-no"
+                }`}
               data-testid="text-total-pnl"
             >
               {totalPnl >= 0 ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
@@ -109,7 +108,7 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
                   <div className="min-w-0">
                     <p className="font-medium truncate">{position.companyName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {position.claimableAmount.toFixed(2)} MOVE
+                      {position.claimableAmount.toFixed(2)} APT
                     </p>
                   </div>
                   <Button
@@ -175,12 +174,11 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
                       {position.noTokens > 0 && `${position.noTokens.toFixed(2)} NO`}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {position.currentValue.toFixed(2)} MOVE
+                      {position.currentValue.toFixed(2)} APT
                     </TableCell>
                     <TableCell
-                      className={`text-right font-mono ${
-                        position.unrealizedPnl >= 0 ? "text-yes" : "text-no"
-                      }`}
+                      className={`text-right font-mono ${position.unrealizedPnl >= 0 ? "text-yes" : "text-no"
+                        }`}
                     >
                       {position.unrealizedPnl >= 0 ? "+" : ""}
                       {position.unrealizedPnl.toFixed(2)} ({position.unrealizedPnlPercent.toFixed(1)}%)

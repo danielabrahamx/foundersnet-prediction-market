@@ -50,7 +50,7 @@
 
 ### Trading Interface
 - Tab system: YES/NO tabs with active state background fill
-- Input group: Label above, input field with MOVE suffix, max button inline
+- Input group: Label above, input field with APT suffix, max button inline
 - Calculation display card: Shows estimated tokens, current price, price impact % with warning if >5%
 - Execute button: Full-width, prominent with loading spinner state
 - Current position card: Your YES/NO tokens with cost basis and unrealized P&L (green/red text)
@@ -112,7 +112,7 @@
 **Activity Feed:**
 - Reverse chronological list with timestamps
 - User avatar (if available) or wallet icon
-- Action description: "Bought 100 YES tokens for 98 MOVE"
+- Action description: "Bought 100 YES tokens for 98 APT"
 - Relative time: "2 minutes ago"
 
 ## Responsive Behavior

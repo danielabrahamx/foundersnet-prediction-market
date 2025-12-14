@@ -93,7 +93,7 @@ export default function TradingPage() {
                   <p className="font-mono font-semibold text-lg">
                     {market.totalLiquidity.toLocaleString()}
                   </p>
-                  <p className="text-xs text-muted-foreground">MOVE</p>
+                  <p className="text-xs text-muted-foreground">APT</p>
                 </div>
                 <div className="rounded-md p-3 text-center bg-muted/50">
                   <p className="text-xs text-muted-foreground mb-1 flex items-center justify-center gap-1">
@@ -103,7 +103,7 @@ export default function TradingPage() {
                   <p className="font-mono font-semibold text-lg">
                     {market.volume24h.toLocaleString()}
                   </p>
-                  <p className="text-xs text-muted-foreground">MOVE</p>
+                  <p className="text-xs text-muted-foreground">APT</p>
                 </div>
               </div>
             </CardContent>
@@ -138,7 +138,7 @@ export default function TradingPage() {
                         {activity.type}
                       </Badge>
                       <span className="text-sm">
-                        {activity.action} {activity.tokens.toFixed(1)} tokens for {activity.amount} MOVE
+                        {activity.action} {activity.tokens.toFixed(1)} tokens for {activity.amount} APT
                       </span>
                     </div>
                     <span className="text-xs text-muted-foreground">{activity.time}</span>

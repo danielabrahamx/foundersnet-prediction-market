@@ -5,12 +5,13 @@ import { formatTimeUntilExpiry } from "@/services/amm";
 import { useWallet } from "@/contexts/WalletContext";
 import { apiRequest } from "@/lib/queryClient";
 import type { Market, Position } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 function marketToDisplay(m: Market): MarketDisplay {
   const total = (m.yesPool || 5000) + (m.noPool || 5000);
   const yesPriceBps = total > 0 ? Math.round(((m.noPool || 5000) / total) * 10000) : 5000;
   const noPriceBps = 10000 - yesPriceBps;
-  
+
   return {
     id: m.id,
     companyName: m.companyName,
@@ -34,12 +35,12 @@ function positionToDisplay(p: Position, market: MarketDisplay | undefined): User
   const currentValue = yesValue + noValue;
   const unrealizedPnl = currentValue - (p.totalInvested || 0);
   const unrealizedPnlPercent = p.totalInvested > 0 ? (unrealizedPnl / p.totalInvested) * 100 : 0;
-  
+
   const hasWinningTokens = market?.resolved
     ? (market.winningOutcome ? (p.yesTokens || 0) > 0 : (p.noTokens || 0) > 0)
     : false;
   const winningTokens = market?.winningOutcome ? (p.yesTokens || 0) : (p.noTokens || 0);
-  
+
   return {
     marketId: p.marketId,
     companyName: market?.companyName || "Unknown Market",
@@ -59,21 +60,21 @@ function generatePriceHistory(baseYesPrice: number): PriceHistory[] {
   const history: PriceHistory[] = [];
   const now = Date.now();
   let currentPrice = baseYesPrice - 1000 + Math.random() * 500;
-  
+
   for (let i = 168; i >= 0; i--) {
     const change = (Math.random() - 0.48) * 200;
     currentPrice = Math.max(1000, Math.min(9000, currentPrice + change));
-    
+
     history.push({
       timestamp: now - i * 60 * 60 * 1000,
       yesPriceBps: Math.round(currentPrice),
       noPriceBps: 10000 - Math.round(currentPrice),
     });
   }
-  
+
   history[history.length - 1].yesPriceBps = baseYesPrice;
   history[history.length - 1].noPriceBps = 10000 - baseYesPrice;
-  
+
   return history;
 }
 
@@ -107,16 +108,30 @@ interface MarketProviderProps {
 }
 
 export function MarketProvider({ children }: MarketProviderProps) {
-  const { address } = useWallet();
+  const { address, signAndSubmitTransaction, connected } = useWallet();
   const queryClient = useQueryClient();
   const [priceHistories] = useState<Map<string, PriceHistory[]>>(new Map());
+  const { toast } = useToast();
 
+  // Fetch markets with enhanced response parsing
   const { data: rawMarkets = [], isLoading: marketsLoading, refetch: refetchMarkets } = useQuery<Market[]>({
     queryKey: ["/api/markets"],
+    queryFn: async () => {
+      const res = await fetch("/api/markets", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch markets");
+      const json = await res.json();
+      // API returns { data: Market[], meta: {...} }
+      return json.data || json;
+    },
   });
 
   const { data: rawPositions = [], isLoading: positionsLoading } = useQuery<Position[]>({
     queryKey: ["/api/positions", address],
+    queryFn: async () => {
+      // Positions are now fetched from blockchain for each market
+      // For now, return empty array - positions should be fetched per-market from blockchain
+      return [];
+    },
     enabled: !!address,
   });
 
@@ -158,18 +173,47 @@ export function MarketProvider({ children }: MarketProviderProps) {
 
   const tradeMutation = useMutation({
     mutationFn: async (trade: { marketId: string; type: "YES" | "NO"; amount: number }) => {
-      const market = getMarket(trade.marketId);
-      const tokensOut = trade.amount / (trade.type === "YES" ? (market?.yesPriceUsd || 0.5) : (market?.noPriceUsd || 0.5));
-      
-      await apiRequest("POST", "/api/trades", {
+      if (!connected || !address) {
+        throw new Error("Wallet not connected");
+      }
+
+      // Step 1: Request unsigned transaction from backend
+      const response = await apiRequest("POST", "/api/place-bet", {
         marketId: trade.marketId,
+        betType: trade.type,
+        amount: Math.round(trade.amount),
         userAddress: address,
-        tradeType: trade.type,
-        action: "BUY",
-        moveAmount: Math.round(trade.amount),
-        tokensAmount: Math.round(tokensOut),
-        price: trade.type === "YES" ? (market?.yesPriceBps || 5000) : (market?.noPriceBps || 5000),
       });
+
+      const result = await response.json();
+
+      if (!result.unsignedTransaction) {
+        throw new Error(result.error || "Failed to create transaction");
+      }
+
+      // Step 2: Parse unsigned transaction and sign with wallet
+      const unsignedTx = JSON.parse(result.unsignedTransaction);
+
+      toast({
+        title: "Signing transaction...",
+        description: "Please approve the transaction in your wallet",
+      });
+
+      // Step 3: Sign and submit with wallet adapter
+      const txResponse = await signAndSubmitTransaction({
+        data: unsignedTx.rawTransaction || unsignedTx,
+      });
+
+      // Step 4: Report txHash back to backend for verification
+      await apiRequest("POST", "/api/place-bet", {
+        marketId: trade.marketId,
+        betType: trade.type,
+        amount: Math.round(trade.amount),
+        userAddress: address,
+        txHash: txResponse.hash,
+      });
+
+      return txResponse.hash;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/positions", address] });
@@ -182,21 +226,64 @@ export function MarketProvider({ children }: MarketProviderProps) {
   }, [tradeMutation]);
 
   const claimWinnings = useCallback(async (marketId: string) => {
-    console.log(`Claiming winnings from market ${marketId}`);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    queryClient.invalidateQueries({ queryKey: ["/api/positions", address] });
-  }, [address, queryClient]);
+    if (!connected || !address) {
+      throw new Error("Wallet not connected");
+    }
+
+    try {
+      // Step 1: Request unsigned transaction from backend
+      const response = await apiRequest("POST", "/api/claim-winnings", {
+        marketId,
+        userAddress: address,
+      });
+
+      const result = await response.json();
+
+      if (!result.unsignedTransaction) {
+        throw new Error(result.error || "Failed to create claim transaction");
+      }
+
+      // Step 2: Parse unsigned transaction and sign with wallet
+      const unsignedTx = JSON.parse(result.unsignedTransaction);
+
+      toast({
+        title: "Claiming winnings...",
+        description: "Please approve the transaction in your wallet",
+      });
+
+      // Step 3: Sign and submit with wallet adapter
+      const txResponse = await signAndSubmitTransaction({
+        data: unsignedTx.rawTransaction || unsignedTx,
+      });
+
+      // Step 4: Report txHash back to backend for verification
+      await apiRequest("POST", "/api/claim-winnings", {
+        marketId,
+        userAddress: address,
+        txHash: txResponse.hash,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/positions", address] });
+      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
+
+      toast({
+        title: "Winnings claimed!",
+        description: `Transaction confirmed: ${txResponse.hash.slice(0, 8)}...`,
+      });
+    } catch (error) {
+      console.error("Error claiming winnings:", error);
+      throw error;
+    }
+  }, [address, connected, queryClient, signAndSubmitTransaction, toast]);
 
   const createMarketMutation = useMutation({
     mutationFn: async (data: { name: string; description: string; liquidity: number; expiry: Date }) => {
-      await apiRequest("POST", "/api/markets", {
+      await apiRequest("POST", "/api/create-market", {
         companyName: data.name,
         description: data.description,
         yesPool: Math.round(data.liquidity / 2),
         noPool: Math.round(data.liquidity / 2),
         totalLiquidity: data.liquidity,
-        volume24h: 0,
-        resolved: false,
         expiryTimestamp: data.expiry.getTime(),
         creator: address,
       });
@@ -212,7 +299,8 @@ export function MarketProvider({ children }: MarketProviderProps) {
 
   const resolveMarketMutation = useMutation({
     mutationFn: async (data: { marketId: string; outcome: boolean }) => {
-      await apiRequest("POST", `/api/markets/${data.marketId}/resolve`, {
+      await apiRequest("POST", "/api/resolve-market", {
+        marketId: data.marketId,
         adminAddress: address,
         winningOutcome: data.outcome,
       });
@@ -227,18 +315,10 @@ export function MarketProvider({ children }: MarketProviderProps) {
     await resolveMarketMutation.mutateAsync({ marketId, outcome });
   }, [resolveMarketMutation]);
 
-  const seedMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/seed", { adminAddress: address });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/markets"] });
-    },
-  });
-
   const seedMarkets = useCallback(async () => {
-    await seedMutation.mutateAsync();
-  }, [seedMutation]);
+    console.warn("Seed markets endpoint has been removed. Markets should be created via the blockchain.");
+    // Seed functionality removed - markets should be created through create-market endpoint
+  }, []);
 
   return (
     <MarketContext.Provider

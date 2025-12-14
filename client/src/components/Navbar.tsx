@@ -86,7 +86,7 @@ export function Navbar({ theme, onToggleTheme }: NavbarProps) {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="p-2 border-b">
                     <p className="text-sm text-muted-foreground">Balance</p>
-                    <p className="font-mono font-semibold">{balance.toLocaleString()} MOVE</p>
+                    <p className="font-mono font-semibold">{balance.toLocaleString()} APT</p>
                   </div>
                   <DropdownMenuItem
                     onClick={disconnect}

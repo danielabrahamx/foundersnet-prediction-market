@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
 import { AptosWalletAdapterProvider } from "@aptos-labs/wallet-adapter-react";
-import { Network } from "@aptos-labs/ts-sdk";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { MarketProvider } from "@/contexts/MarketContext";
 import { Navbar } from "@/components/Navbar";
@@ -57,7 +56,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AptosWalletAdapterProvider
         autoConnect={true}
-        dappConfig={{ network: Network.TESTNET }}
+        // Don't specify network - let Nightly wallet handle it (has native Movement support)
         onError={(error) => console.error("Wallet error:", error)}
       >
         <TooltipProvider>

@@ -1,0 +1,46 @@
+[dotenv@17.2.3] injecting env (9) from .env -- tip: ⚙️  override existing env vars with { override: true }
+
+========================================
+  Movement Contract Deployment Check
+========================================
+
+1️⃣  Checking environment variables...
+
+   ✅ MOVEMENT_RPC_URL: https://aptos.testne...
+   ✅ MOVEMENT_CHAIN_ID: 177...
+   ✅ MOVEMENT_CONTRACT_ADDRESS: 0x5bf2c4dde989ae8904...
+   ✅ MOVEMENT_RESOURCE_ACCOUNT: 0x3cab0d4baece087681...
+   ✅ MOVEMENT_ADMIN_PRIVATE_KEY: ed25519-priv-0x26fa3...
+   ✅ MOVEMENT_FAUCET_URL: https://faucet.testn...
+
+2️⃣  Testing RPC connectivity...
+
+   ❌ Failed to connect to RPC: getaddrinfo ENOTFOUND aptos.testnet.suzuka.movementnetwork.xyz
+
+3️⃣  Checking contract deployment...
+
+   ❌ Failed to fetch account modules: getaddrinfo ENOTFOUND aptos.testnet.suzuka.movementnetwork.xyz
+
+4️⃣  Checking MarketRegistry initialization...
+
+   ❌ MarketRegistry NOT FOUND at 0x3cab0d4baece087681585a2ccb8b09f7957c74abef25938f02046c8030ed83a1
+   💡 Hint: The contract may need to be initialized. Run: npm run move:deploy:movement
+
+5️⃣  Checking admin account...
+
+   ✅ Admin address: 0x3cab0d4baece087681585a2ccb8b09f7957c74abef25938f02046c8030ed83a1
+   ⚠️  Could not check admin balance: getaddrinfo ENOTFOUND aptos.testnet.suzuka.movementnetwork.xyz
+
+========================================
+              SUMMARY
+========================================
+
+❌ ERRORS (must fix):
+   • RPC connection failed: getaddrinfo ENOTFOUND aptos.testnet.suzuka.movementnetwork.xyz
+   • Contract check failed: getaddrinfo ENOTFOUND aptos.testnet.suzuka.movementnetwork.xyz
+   • MarketRegistry not initialized
+
+Next steps:
+   1. Set MOVEMENT_PRIVATE_KEY in your .env file
+   2. Run: npm run move:deploy:movement
+

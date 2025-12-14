@@ -57,7 +57,7 @@ export function MarketCard({ market }: MarketCardProps) {
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Droplets className="h-3.5 w-3.5" />
-              <span className="font-mono">{market.totalLiquidity.toLocaleString()} MOVE</span>
+              <span className="font-mono">{market.totalLiquidity.toLocaleString()} APT</span>
             </div>
             <div className="flex items-center gap-1">
               <TrendingUp className="h-3.5 w-3.5" />

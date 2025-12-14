@@ -46,7 +46,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     try {
       const wallets = aptosWallet.wallets;
       console.log("Available wallets:", wallets?.map(w => w.name));
-      
+
       // Check if we're in an iframe (Replit webview)
       const isInIframe = window !== window.top;
       if (isInIframe) {
@@ -54,25 +54,27 @@ export function WalletProvider({ children }: WalletProviderProps) {
         window.open(window.location.href, "_blank");
         return;
       }
-      
+
       if (wallets && wallets.length > 0) {
-        const petraWallet = wallets.find(w => 
-          w.name.toLowerCase().includes("petra")
+        // Prefer Nightly wallet for Movement (has native Movement support)
+        // DO NOT USE Petra - it's Aptos-specific and won't work with Movement
+        const nightlyWallet = wallets.find(w =>
+          w.name.toLowerCase().includes("nightly")
         );
-        
-        if (petraWallet) {
-          console.log("Connecting to Petra wallet...");
-          await aptosWallet.connect(petraWallet.name);
-          console.log("Petra wallet connected successfully");
+
+        if (nightlyWallet) {
+          console.log("Connecting to Nightly wallet (Movement native)...");
+          await aptosWallet.connect(nightlyWallet.name);
+          console.log("Nightly wallet connected successfully");
           return;
         }
-        
+
         console.log("Connecting to first available wallet:", wallets[0].name);
         await aptosWallet.connect(wallets[0].name);
         console.log("Wallet connected:", wallets[0].name);
       } else {
-        console.warn("No wallet extensions detected. Please install Petra wallet.");
-        window.open("https://petra.app/", "_blank");
+        console.warn("No wallet extensions detected. Please install Nightly wallet for Movement.");
+        window.open("https://nightly.app/", "_blank");
       }
     } catch (error) {
       console.error("Failed to connect wallet:", error);
@@ -90,9 +92,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
     if (!connected) {
       throw new Error("Wallet not connected");
     }
-    
+
     console.log("Submitting transaction:", payload);
-    
+
     try {
       // Use the real wallet adapter signAndSubmitTransaction
       const response = await aptosWallet.signAndSubmitTransaction(payload as Parameters<typeof aptosWallet.signAndSubmitTransaction>[0]);
