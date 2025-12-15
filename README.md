@@ -6,13 +6,13 @@
 
 *The closest thing to trading in private companies' shares*
 
-[![Movement Network](https://img.shields.io/badge/Built%20on-Movement%20M1-6366f1?style=for-the-badge)](https://movementnetwork.xyz)
+[![Movement Network](https://img.shields.io/badge/Built%20on-Movement-6366f1?style=for-the-badge)](https://movementnetwork.xyz)
 [![Move Language](https://img.shields.io/badge/Smart%20Contracts-Move-00d4aa?style=for-the-badge)](https://move-language.github.io/move/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 ---
 
-[Demo](#-demo) • [Features](#-features) • [Getting Started](#-getting-started) • [Architecture](#-architecture) • [Smart Contracts](#-smart-contracts) • [Contributing](#-contributing)
+[Features](#-features) • [Getting Started](#-getting-started) • [Architecture](#-architecture) • [Smart Contracts](#-smart-contracts) • [Contributing](#-contributing)
 
 </div>
 
@@ -20,7 +20,7 @@
 
 ## ✨ What is FoundersNet?
 
-FoundersNet is a **decentralized prediction market platform** where users can bet on whether startups will successfully raise their next funding round. Built on the **Movement Network** (M1 testnet), it leverages the security and efficiency of the Move programming language.
+FoundersNet is a **decentralized prediction market platform** where users can bet on whether startups will successfully raise their next funding round. Built on the **Movement Network**, it leverages the security and efficiency of the Move programming language.
 
 ### 🎯 Use Cases
 
@@ -64,18 +64,6 @@ Sleek dark-mode interface with smooth animations and responsive design.
 
 ---
 
-## 🖼️ Demo
-
-<div align="center">
-
-| Markets List | Trading Interface | Portfolio Dashboard |
-|:---:|:---:|:---:|
-| Browse active prediction markets | Place YES/NO bets on outcomes | Track wins, losses & claims |
-
-</div>
-
----
-
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -104,15 +92,15 @@ Create a `.env` file with the following variables:
 
 ```env
 # Movement Network Configuration
-MOVEMENT_RPC_URL=https://aptos.testnet.suzuka.movementnetwork.xyz/v1
-MOVEMENT_CHAIN_ID=177
+MOVEMENT_RPC_URL=<your-rpc-endpoint>
+MOVEMENT_CHAIN_ID=<chain-id>
 MOVEMENT_CONTRACT_ADDRESS=<your-deployed-contract-address>
 MOVEMENT_RESOURCE_ACCOUNT=<resource-account-address>
 MOVEMENT_ADMIN_PRIVATE_KEY=<admin-private-key>
 
-# Client Configuration
-VITE_MOVEMENT_RPC_URL=https://aptos.testnet.suzuka.movementnetwork.xyz/v1
-VITE_MOVEMENT_CHAIN_ID=177
+# Client Configuration  
+VITE_MOVEMENT_RPC_URL=<your-rpc-endpoint>
+VITE_MOVEMENT_CHAIN_ID=<chain-id>
 VITE_CONTRACT_ADDRESS=<your-deployed-contract-address>
 ```
 
@@ -182,13 +170,13 @@ Payout = (Total Pool / Winning Pool) × Your Bet
 - Winners split the entire pool proportionally
 - No counterparty risk - payouts are guaranteed by the smart contract
 
-### Deploy to Movement Testnet
+### Deploy to Movement
 
 ```bash
 # Run Move tests first
 npm run move:test
 
-# Deploy to Movement M1 testnet
+# Deploy to Movement
 npm run move:deploy:movement
 ```
 
@@ -234,7 +222,7 @@ npm run check
 
 - **Frontend**: React 18, TypeScript, TailwindCSS, Shadcn/ui
 - **Backend**: Express.js, TypeScript
-- **Blockchain**: Movement Network (M1), Move language
+- **Blockchain**: Movement Network, Move language
 - **SDK**: @aptos-labs/ts-sdk
 
 ---
@@ -259,7 +247,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [Movement Labs](https://movementnetwork.xyz) for the incredible L2 infrastructure
+- [Movement Labs](https://movementnetwork.xyz) for the incredible blockchain infrastructure
 - [Aptos Labs](https://aptos.dev) for the Move language and SDK
 - The open-source community for inspiration and tools
 
