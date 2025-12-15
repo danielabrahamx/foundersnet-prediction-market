@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, ArrowUpRight, ArrowDownRight, Gift } from "lucide-react";
+import { Loader2, TrendingUp, Gift, Trophy, XCircle } from "lucide-react";
 import type { UserPositionDisplay } from "@/types/market";
 import { useState } from "react";
 import { Link } from "wouter";
@@ -31,10 +31,18 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
     }
   };
 
-  const totalValue = positions.reduce((sum, p) => sum + p.currentValue, 0);
-  const totalPnl = positions.reduce((sum, p) => sum + p.unrealizedPnl, 0);
-  const totalInvested = positions.reduce((sum, p) => sum + p.totalInvested, 0);
-  const totalPnlPercent = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+  // Calculate totals - separate active and resolved positions
+  const activePositions = positions.filter(p => !p.resolved);
+  const resolvedPositions = positions.filter(p => p.resolved);
+
+  // Total bet amount across all active positions
+  const totalActiveBets = activePositions.reduce((sum, p) => sum + p.totalInvested, 0);
+
+  // Total potential profit from active positions (if you win)
+  const totalPotentialProfit = activePositions.reduce((sum, p) => sum + p.potentialPnl, 0);
+
+  // Total realized P/L from resolved positions
+  const totalRealizedPnl = resolvedPositions.reduce((sum, p) => sum + p.unrealizedPnl, 0);
 
   const claimablePositions = positions.filter(p => p.claimable);
 
@@ -58,40 +66,52 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
 
   return (
     <div className="space-y-6">
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Value</p>
+            <p className="text-sm text-muted-foreground">Total Bet Amount</p>
             <p className="text-2xl font-mono font-bold" data-testid="text-total-value">
-              {totalValue.toLocaleString()} APT
+              {totalActiveBets.toFixed(2)} MOVE
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Across {activePositions.length} active position{activePositions.length !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total P&L</p>
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <TrendingUp className="h-4 w-4" />
+              Potential Profit
+            </p>
             <p
-              className={`text-2xl font-mono font-bold flex items-center gap-1 ${totalPnl >= 0 ? "text-yes" : "text-no"
-                }`}
+              className="text-2xl font-mono font-bold text-yes"
               data-testid="text-total-pnl"
             >
-              {totalPnl >= 0 ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
-              {totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(2)} ({totalPnlPercent.toFixed(1)}%)
+              +{totalPotentialProfit.toFixed(2)} MOVE
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              If your predictions are correct
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={resolvedPositions.length > 0 ? (totalRealizedPnl >= 0 ? "bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20" : "bg-gradient-to-br from-red-500/10 to-red-600/5 border-red-500/20") : ""}>
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Active Positions</p>
-            <p className="text-2xl font-mono font-bold" data-testid="text-positions-count">
-              {positions.filter(p => !p.resolved).length}
+            <p className="text-sm text-muted-foreground">Realized P/L</p>
+            <p className={`text-2xl font-mono font-bold ${totalRealizedPnl >= 0 ? "text-yes" : "text-no"}`}>
+              {totalRealizedPnl >= 0 ? "+" : ""}{totalRealizedPnl.toFixed(2)} MOVE
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              From {resolvedPositions.length} resolved market{resolvedPositions.length !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Claimable Winnings Section */}
       {claimablePositions.length > 0 && (
-        <Card className="border-yes/50 bg-yes/5">
+        <Card className="border-yes/50 bg-gradient-to-r from-yes/10 to-yes/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <Gift className="h-5 w-5 text-yes" />
@@ -103,24 +123,29 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
               {claimablePositions.map((position) => (
                 <div
                   key={position.marketId}
-                  className="flex items-center justify-between gap-4 p-3 bg-background rounded-md"
+                  className="flex items-center justify-between gap-4 p-4 bg-background/80 rounded-lg border border-yes/20"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{position.companyName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {position.claimableAmount.toFixed(2)} APT
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-sm text-muted-foreground">Bet: {position.totalInvested.toFixed(2)} MOVE</span>
+                      <span className="text-sm text-muted-foreground">→</span>
+                      <span className="text-sm font-semibold text-yes">Win: {position.claimableAmount.toFixed(2)} MOVE</span>
+                      <Badge className="bg-yes/20 text-yes text-xs">
+                        +{(position.claimableAmount - position.totalInvested).toFixed(2)} profit
+                      </Badge>
+                    </div>
                   </div>
                   <Button
-                    size="sm"
                     onClick={() => handleClaim(position.marketId)}
                     disabled={claimingId === position.marketId}
+                    className="bg-yes hover:bg-yes/90"
                     data-testid={`button-claim-${position.marketId}`}
                   >
                     {claimingId === position.marketId ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      "Claim"
+                      "Claim Winnings"
                     )}
                   </Button>
                 </div>
@@ -130,6 +155,7 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
         </Card>
       )}
 
+      {/* All Positions Table */}
       <Card>
         <CardHeader>
           <CardTitle>All Positions</CardTitle>
@@ -141,72 +167,108 @@ export function PortfolioTable({ positions, onClaimWinnings }: PortfolioTablePro
                 <TableRow>
                   <TableHead>Market</TableHead>
                   <TableHead>Position</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                  <TableHead className="text-right">P&L</TableHead>
+                  <TableHead className="text-right">Bet Amount</TableHead>
+                  <TableHead className="text-right">Potential Profit</TableHead>
+                  <TableHead className="text-right">Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {positions.map((position) => (
-                  <TableRow key={position.marketId} data-testid={`row-position-${position.marketId}`}>
-                    <TableCell className="max-w-[200px]">
-                      <Link href={`/market/${position.marketId}`}>
-                        <span className="hover:underline cursor-pointer truncate block">
-                          {position.companyName}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {position.yesTokens > 0 && (
-                        <Badge className="bg-yes/20 text-yes border-yes/30">YES</Badge>
-                      )}
-                      {position.noTokens > 0 && (
-                        <Badge className="bg-no/20 text-no border-no/30 ml-1">NO</Badge>
-                      )}
-                      {position.resolved && (
-                        <Badge variant="secondary" className="ml-1">Resolved</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {position.yesTokens > 0 && `${position.yesTokens.toFixed(2)} YES`}
-                      {position.yesTokens > 0 && position.noTokens > 0 && <br />}
-                      {position.noTokens > 0 && `${position.noTokens.toFixed(2)} NO`}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {position.currentValue.toFixed(2)} APT
-                    </TableCell>
-                    <TableCell
-                      className={`text-right font-mono ${position.unrealizedPnl >= 0 ? "text-yes" : "text-no"
-                        }`}
-                    >
-                      {position.unrealizedPnl >= 0 ? "+" : ""}
-                      {position.unrealizedPnl.toFixed(2)} ({position.unrealizedPnlPercent.toFixed(1)}%)
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {position.claimable ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleClaim(position.marketId)}
-                          disabled={claimingId === position.marketId}
-                          data-testid={`button-claim-table-${position.marketId}`}
-                        >
-                          {claimingId === position.marketId ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            "Claim"
-                          )}
-                        </Button>
-                      ) : (
+                {positions.map((position) => {
+                  // Use the isWinner field which correctly tracks wins even after claiming
+                  const isWinner = position.resolved && position.isWinner;
+                  const isLoser = position.resolved && !position.isWinner;
+                  const hasClaimed = position.hasClaimed;
+
+                  return (
+                    <TableRow key={position.marketId} data-testid={`row-position-${position.marketId}`}>
+                      <TableCell className="max-w-[200px]">
                         <Link href={`/market/${position.marketId}`}>
-                          <Button size="sm" variant="outline" data-testid={`button-trade-${position.marketId}`}>
-                            Trade
-                          </Button>
+                          <span className="hover:underline cursor-pointer truncate block font-medium">
+                            {position.companyName}
+                          </span>
                         </Link>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        {position.yesTokens > 0 && (
+                          <Badge className="bg-yes/20 text-yes border-yes/30">YES</Badge>
+                        )}
+                        {position.noTokens > 0 && (
+                          <Badge className="bg-no/20 text-no border-no/30 ml-1">NO</Badge>
+                        )}
+                        {position.yesTokens === 0 && position.noTokens === 0 && position.resolved && (
+                          <Badge variant="outline" className="text-muted-foreground">
+                            {hasClaimed ? (position.totalInvested > 0 ? "YES" : "—") : "—"}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {position.totalInvested.toFixed(2)} MOVE
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {position.resolved ? (
+                          <span className={isWinner ? "text-yes" : "text-no"}>
+                            {isWinner ? `+${position.unrealizedPnl.toFixed(2)}` : position.unrealizedPnl.toFixed(2)} MOVE
+                          </span>
+                        ) : (
+                          <span className="text-yes">
+                            +{position.potentialPnl.toFixed(2)} MOVE
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isWinner && !hasClaimed && (
+                          <Badge className="bg-yes/20 text-yes border-yes/30 gap-1">
+                            <Trophy className="h-3 w-3" />
+                            Won
+                          </Badge>
+                        )}
+                        {isWinner && hasClaimed && (
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 gap-1">
+                            <Trophy className="h-3 w-3" />
+                            Claimed
+                          </Badge>
+                        )}
+                        {isLoser && (
+                          <Badge className="bg-no/20 text-no border-no/30 gap-1">
+                            <XCircle className="h-3 w-3" />
+                            Lost
+                          </Badge>
+                        )}
+                        {!position.resolved && (
+                          <Badge variant="outline" className="gap-1">
+                            Active
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {position.claimable ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleClaim(position.marketId)}
+                            disabled={claimingId === position.marketId}
+                            className="bg-yes hover:bg-yes/90"
+                            data-testid={`button-claim-table-${position.marketId}`}
+                          >
+                            {claimingId === position.marketId ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Claim"
+                            )}
+                          </Button>
+                        ) : position.resolved ? (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        ) : (
+                          <Link href={`/market/${position.marketId}`}>
+                            <Button size="sm" variant="outline" data-testid={`button-trade-${position.marketId}`}>
+                              View
+                            </Button>
+                          </Link>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

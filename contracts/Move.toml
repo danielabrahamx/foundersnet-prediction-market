@@ -9,10 +9,12 @@ authors = ["FoundersNet"]
 # - or a profile-aware deployment script.
 prediction_market = "_"
 
-[dev-addresses]
-prediction_market = "0xcafe"
-
+# Use an older, Movement-compatible version of AptosFramework
+# Movement CLI v7.x requires Move 1.x syntax (not Move 2.0)
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"
-rev = "aptos-node-v1.14.0"
+rev = "aptos-node-v1.9.3"
 subdir = "aptos-move/framework/aptos-framework"
+
+[dev-addresses]
+prediction_market = "0xf111021255abd6e2cc41dc34055cebb8ad104f4034868d45ac9b1059ecb01a91"

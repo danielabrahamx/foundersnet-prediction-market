@@ -115,7 +115,9 @@ export class MovementClient {
     // Load deployment config from env
     this.deploymentConfig = {
       packageAddress: process.env.MOVEMENT_CONTRACT_ADDRESS!,
-      registryAddress: process.env.MOVEMENT_RESOURCE_ACCOUNT!,
+      // MarketRegistry is stored at the admin address (where initialize was called)
+      // NOT at the resource account (which only holds coins)
+      registryAddress: process.env.MOVEMENT_CONTRACT_ADDRESS!,
     };
 
     const config = new AptosConfig({
@@ -286,9 +288,19 @@ export class MovementClient {
         return null;
       }
 
-      // Calculate average prices (simplified - in production you'd track this from trades)
-      const averageYesPrice = 5000; // 50% in basis points
-      const averageNoPrice = 5000;
+      // Calculate average prices based on investment
+      // Calculate prices based on current market state (Parimutuel odds)
+      // In Parimutuel, "Entry Price" isn't fixed like CPMM, so we return current implied probability
+      let averageYesPrice = 5000;
+      let averageNoPrice = 5000;
+
+      try {
+        const prices = await this.getMarketPrices(marketId);
+        averageYesPrice = prices.yesPriceBps;
+        averageNoPrice = prices.noPriceBps;
+      } catch (e) {
+        console.warn(`Could not fetch prices for position on market ${marketId}`);
+      }
 
       return {
         marketId,
@@ -306,6 +318,57 @@ export class MovementClient {
       );
       // Return null instead of throwing - user may not have a position
       return null;
+    }
+  }
+
+  /**
+   * Get all positions for a user across all markets
+   */
+  async getUserPositions(userAddress: string): Promise<MovementPosition[]> {
+    try {
+      // First, get all market IDs
+      const idsResult = await this.aptos.view({
+        payload: {
+          function: `${this.deploymentConfig.packageAddress}::market::get_market_ids`,
+          typeArguments: [],
+          functionArguments: [this.getRegistryAddress()],
+        },
+      });
+
+      if (!idsResult || idsResult.length === 0 || !Array.isArray(idsResult[0])) {
+        return [];
+      }
+
+      const marketIds = idsResult[0] as string[];
+      const positions: MovementPosition[] = [];
+
+      // Fetch position for each market
+      // Using Promise.all for parallel fetching
+      const positionPromises = marketIds.map(async (marketId) => {
+        try {
+          return await this.getPositionFromChain(marketId, userAddress);
+        } catch (error) {
+          console.error(`Failed to fetch position for market ${marketId}:`, error);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(positionPromises);
+
+      // Filter out nulls (no position)
+      for (const result of results) {
+        if (result) {
+          positions.push(result);
+        }
+      }
+
+      return positions;
+    } catch (error: any) {
+      console.error(`Failed to fetch user positions for ${userAddress}:`, error);
+      throw new MovementNetworkError(
+        "Failed to fetch user positions",
+        { originalError: error, userAddress }
+      );
     }
   }
 
@@ -370,8 +433,8 @@ export class MovementClient {
         const balance = await this.aptos.getAccountAPTAmount({
           accountAddress: this.adminAccount.accountAddress,
         });
-        console.log(`✓ Admin balance: ${balance} octas (${balance / 100000000} APT)`);
-        if (balance < 10000000) { // Less than 0.1 APT
+        console.log(`✓ Admin balance: ${balance} octas (${balance / 100000000} MOVE)`);
+        if (balance < 10000000) { // Less than 0.1 MOVE
           console.warn(`⚠ Warning: Admin balance is low. May not have enough for gas + liquidity.`);
         }
       } catch (balanceError: any) {
@@ -436,6 +499,70 @@ export class MovementClient {
   }
 
   /**
+   * Build an unsigned create market transaction for client-side signing
+   */
+  async buildCreateMarketTx(marketData: {
+    companyName: string;
+    description: string;
+    initialLiquidity: bigint;
+    expiryTimestamp: bigint;
+    creator: string;
+  }): Promise<string> {
+    try {
+      const payload = {
+        function: `${this.deploymentConfig.packageAddress}::market::create_market`,
+        typeArguments: [],
+        functionArguments: [
+          this.getRegistryAddress(),
+          marketData.companyName,
+          marketData.description,
+          marketData.initialLiquidity.toString(),
+          marketData.expiryTimestamp.toString(),
+        ],
+      };
+
+      console.log(`[MovementClient] Built create market payload for ${marketData.creator}`);
+      return this.serializeBigInt(payload);
+    } catch (error: any) {
+      console.error("Failed to build create market transaction:", error);
+      throw new MovementContractError(
+        "Failed to build create market transaction",
+        undefined,
+        { originalError: error, marketData }
+      );
+    }
+  }
+
+  /**
+   * Build an unsigned resolve market transaction for client-side signing
+   */
+  async buildResolveMarketTx(
+    marketId: string,
+    winningOutcome: boolean
+  ): Promise<string> {
+    try {
+      const payload = {
+        function: `${this.deploymentConfig.packageAddress}::market::resolve_market`,
+        typeArguments: [],
+        functionArguments: [
+          this.getRegistryAddress(),
+          marketId,
+          winningOutcome,
+        ],
+      };
+
+      return this.serializeBigInt(payload);
+    } catch (error: any) {
+      console.error("Failed to build resolve market transaction:", error);
+      throw new MovementContractError(
+        "Failed to build resolve market transaction",
+        undefined,
+        { originalError: error, marketId }
+      );
+    }
+  }
+
+  /**
    * Submit a resolve market transaction (admin only)
    */
   async submitResolveMarketTx(
@@ -481,6 +608,15 @@ export class MovementClient {
   }
 
   /**
+   * Helper to serialize object with BigInt support
+   */
+  private serializeBigInt(obj: any): string {
+    return JSON.stringify(obj, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    );
+  }
+
+  /**
    * Build an unsigned place bet transaction for client-side signing
    */
   async submitPlaceBetTx(
@@ -489,30 +625,90 @@ export class MovementClient {
     moveAmount: bigint,
     userAddress: string
   ): Promise<string> {
+    console.log(`\n========== PLACE BET DEBUG ==========`);
+    console.log(`Timestamp: ${new Date().toISOString()}`);
+    console.log(`Market ID: ${marketId} (type: ${typeof marketId})`);
+    console.log(`Bet Type: ${betType}`);
+    console.log(`Amount: ${moveAmount.toString()} octas`);
+    console.log(`User Address: ${userAddress}`);
+    console.log(`Package Address: ${this.deploymentConfig.packageAddress}`);
+    console.log(`Registry Address: ${this.getRegistryAddress()}`);
+
     try {
+      // First verify the user account exists and has balance
+      console.log(`[Step 1] Checking user account...`);
+      try {
+        const balance = await this.aptos.getAccountAPTAmount({
+          accountAddress: userAddress,
+        });
+        console.log(`✓ User balance: ${balance} octas (${balance / 100000000} MOVE)`);
+
+        if (balance < Number(moveAmount)) {
+          throw new MovementContractError(
+            `Insufficient balance: have ${balance} octas, need ${moveAmount} octas`,
+            "INSUFFICIENT_BALANCE"
+          );
+        }
+      } catch (balanceError: any) {
+        if (balanceError?.name === "MovementContractError") throw balanceError;
+        console.error(`✗ Failed to check user balance: ${balanceError?.message}`);
+        throw new MovementContractError(
+          `Account ${userAddress} does not exist on chain or is not accessible. Please ensure your wallet is funded.`,
+          "ACCOUNT_NOT_FOUND",
+          { originalError: balanceError }
+        );
+      }
+
       const functionName = betType === "YES" ? "buy_yes" : "buy_no";
+      const fullFunctionName = `${this.deploymentConfig.packageAddress}::market::${functionName}`;
 
-      const builtTxn = await this.aptos.transaction.build.simple({
-        sender: userAddress,
-        data: {
-          function: `${this.deploymentConfig.packageAddress}::market::${functionName}`,
-          typeArguments: [],
-          functionArguments: [
-            this.getRegistryAddress(),
-            marketId,
-            moveAmount.toString(),
-          ],
-        },
-      });
+      console.log(`[Step 2] Building transaction payload...`);
+      console.log(`Function: ${fullFunctionName}`);
+      console.log(`Arguments: [${this.getRegistryAddress()}, ${marketId}, ${moveAmount.toString()}]`);
 
-      // Return unsigned transaction as JSON for client to sign
-      return JSON.stringify(builtTxn);
+      // Construct the payload for the wallet adapter
+      const payload = {
+        function: fullFunctionName,
+        typeArguments: [],
+        functionArguments: [
+          this.getRegistryAddress(),
+          marketId,
+          moveAmount.toString(),
+        ],
+      };
+
+      console.log(`✓ Payload constructed successfully`);
+      console.log(`========== END PLACE BET DEBUG ==========\n`);
+
+      // Return payload as JSON for client to use with wallet adapter
+      // serializeBigInt handles any potential BigInts (though we converted to string above)
+      return this.serializeBigInt(payload);
     } catch (error: any) {
-      console.error("Failed to build place bet transaction:", error);
+      console.error(`\n========== PLACE BET ERROR ==========`);
+      console.error(`Error Type: ${error?.name || 'Unknown'}`);
+      console.error(`Error Message: ${error?.message || String(error)}`);
+      // ... existing error logging ...
+      console.error(`Error Code: ${error?.code || 'N/A'}`);
+
+      if (error?.response) {
+        console.error(`Response Status: ${error.response.status}`);
+        console.error(`Response Data:`, JSON.stringify(error.response.data, null, 2));
+      }
+
+      if (error?.body) {
+        console.error(`Error Body:`, JSON.stringify(error.body, null, 2));
+      }
+
+      if (error?.stack) {
+        console.error(`Stack: ${error.stack}`);
+      }
+
+      console.error(`========== END PLACE BET ERROR ==========\n`);
+
       throw new MovementContractError(
-        "Failed to build bet transaction",
-        undefined,
-        { originalError: error, marketId, betType, moveAmount, userAddress }
+        `Failed to build bet transaction: ${error?.message || String(error)}`,
+        error?.code,
+        { originalError: error, marketId, betType, moveAmount: moveAmount.toString(), userAddress }
       );
     }
   }
@@ -525,17 +721,14 @@ export class MovementClient {
     userAddress: string
   ): Promise<string> {
     try {
-      const builtTxn = await this.aptos.transaction.build.simple({
-        sender: userAddress,
-        data: {
-          function: `${this.deploymentConfig.packageAddress}::market::claim_winnings`,
-          typeArguments: [],
-          functionArguments: [this.getRegistryAddress(), marketId],
-        },
-      });
+      const payload = {
+        function: `${this.deploymentConfig.packageAddress}::market::claim_winnings`,
+        typeArguments: [],
+        functionArguments: [this.getRegistryAddress(), marketId],
+      };
 
-      // Return unsigned transaction as JSON for client to sign
-      return JSON.stringify(builtTxn);
+      // Return payload as JSON for client
+      return this.serializeBigInt(payload);
     } catch (error: any) {
       console.error("Failed to build claim winnings transaction:", error);
       throw new MovementContractError(
@@ -853,9 +1046,14 @@ export class MovementClient {
   }
 
   getAdminAddress(): string | null {
-    return this.adminAccount
-      ? this.adminAccount.accountAddress.toString()
-      : null;
+    // Return admin account address if initialized, otherwise return configured admin address from env
+    // This allows the server to validate admin actions even if it doesn't hold the private key
+    if (this.adminAccount) {
+      return this.adminAccount.accountAddress.toString();
+    }
+    // Fallback to configured resource account (which is typically the admin)
+    // or MOVEMENT_CONTRACT_ADDRESS if they are essentially the same owner
+    return this.deploymentConfig.registryAddress || null;
   }
 
   isAdminInitialized(): boolean {

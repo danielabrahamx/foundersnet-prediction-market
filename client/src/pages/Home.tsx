@@ -6,27 +6,16 @@ import { useWallet } from "@/contexts/WalletContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Database, Loader2 } from "lucide-react";
+import { Database } from "lucide-react";
+import { Link } from "wouter";
 import type { MarketFilter } from "@/types/market";
 
 interface EmptyStateProps {
   searchQuery: string;
-  onSeed: () => Promise<void>;
   isAdmin: boolean;
 }
 
-function EmptyState({ searchQuery, onSeed, isAdmin }: EmptyStateProps) {
-  const [seeding, setSeeding] = useState(false);
-
-  const handleSeed = async () => {
-    setSeeding(true);
-    try {
-      await onSeed();
-    } finally {
-      setSeeding(false);
-    }
-  };
-
+function EmptyState({ searchQuery, isAdmin }: EmptyStateProps) {
   if (searchQuery) {
     return (
       <div className="text-center py-12">
@@ -45,28 +34,24 @@ function EmptyState({ searchQuery, onSeed, isAdmin }: EmptyStateProps) {
         <p className="text-lg font-semibold mb-2">No markets available</p>
         <p className="text-muted-foreground mb-4">
           {isAdmin
-            ? "Seed the database with sample prediction markets to get started."
-            : "Connect your wallet and check back soon for new markets."}
+            ? "Create new prediction markets from the Admin Dashboard."
+            : "Check back soon for new prediction markets."}
         </p>
         {isAdmin && (
-          <Button onClick={handleSeed} disabled={seeding} data-testid="button-seed">
-            {seeding ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Seeding...
-              </>
-            ) : (
-              "Seed Sample Markets"
-            )}
-          </Button>
+          <Link href="/admin">
+            <Button data-testid="button-go-to-admin">
+              Go to Admin Dashboard
+            </Button>
+          </Link>
         )}
       </CardContent>
     </Card>
   );
 }
 
+
 export default function Home() {
-  const { markets, loading, seedMarkets } = useMarkets();
+  const { markets, loading } = useMarkets();
   const { isAdmin } = useWallet();
   const [activeFilter, setActiveFilter] = useState<MarketFilter>("active");
   const [activeSort, setActiveSort] = useState<MarketSort>("newest");
@@ -124,7 +109,7 @@ export default function Home() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">
-          Prediction Markets for startup valuations.
+          Prediction Markets for startup fundraises.
         </h1>
         <p className="text-muted-foreground">
           The closest thing to trading in private companies' shares.
@@ -149,7 +134,6 @@ export default function Home() {
       ) : filteredAndSortedMarkets.length === 0 ? (
         <EmptyState
           searchQuery={searchQuery}
-          onSeed={seedMarkets}
           isAdmin={isAdmin}
         />
       ) : (

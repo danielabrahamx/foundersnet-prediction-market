@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { spawnSync } from "node:child_process";
+import { spawnSync, SpawnSyncReturns } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,25 +33,42 @@ function normalizePrivateKey(input: string): string {
   return key;
 }
 
+interface CommandResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  status: number | null;
+}
+
 function runCommand(
   command: string,
   args: string[],
   cwd: string,
-  env?: Record<string, string>
-): void {
+): CommandResult {
   console.log(`\n$ ${command} ${args.join(" ")}\n`);
   const res = spawnSync(command, args, {
     cwd,
-    stdio: "inherit",
-    env: { ...process.env, ...env },
+    encoding: "utf8",
     shell: true,
   });
-  if (res.error) {
-    throw res.error;
-  }
-  if (res.status !== 0) {
-    throw new Error(`Command failed with exit code ${res.status}`);
-  }
+
+  // Print output
+  if (res.stdout) console.log(res.stdout);
+  if (res.stderr) console.error(res.stderr);
+
+  // Check for errors in output (Aptos CLI returns 0 even on errors sometimes)
+  const output = (res.stdout || "") + (res.stderr || "");
+  const hasError = output.includes('"Error"') ||
+    output.includes('error:') ||
+    output.includes('DESERIALIZATION_ERROR') ||
+    output.includes('LINKER_ERROR');
+
+  return {
+    success: res.status === 0 && !hasError,
+    stdout: res.stdout || "",
+    stderr: res.stderr || "",
+    status: res.status,
+  };
 }
 
 async function main() {
@@ -60,7 +77,6 @@ async function main() {
   const contractsDir = path.join(repoRoot, "contracts");
 
   const movementRpcUrl = getRequiredEnv("MOVEMENT_RPC_URL");
-  const movementFaucetUrl = process.env.MOVEMENT_FAUCET_URL;
   const movementPrivateKeyHex = normalizePrivateKey(getRequiredEnv("MOVEMENT_PRIVATE_KEY"));
 
   const seedHex = (process.env.MOVEMENT_RESOURCE_SEED_HEX ?? "01").replace(/^0x/i, "");
@@ -80,58 +96,73 @@ async function main() {
   console.log(`RPC URL: ${movementRpcUrl}`);
   console.log(`Contracts Directory: ${contractsDir}`);
 
-  // Create a temporary .aptos/config.yaml for CLI
-  const aptosConfigDir = path.join(os.homedir(), ".aptos");
-  fs.mkdirSync(aptosConfigDir, { recursive: true });
-
+  // Create config files for both Movement CLI and Aptos CLI
+  // Movement CLI uses ~/.movement/config.yaml, Aptos CLI uses ~/.aptos/config.yaml
   const configContent = `---
 profiles:
-  movement:
+  default:
     network: Custom
     private_key: "${movementPrivateKeyHex}"
     public_key: "${account.publicKey.toString()}"
     account: ${packageAddress}
     rest_url: "${movementRpcUrl}"
-${movementFaucetUrl ? `    faucet_url: "${movementFaucetUrl}"` : ""}
 `;
 
-  const configPath = path.join(aptosConfigDir, "config.yaml");
-  fs.writeFileSync(configPath, configContent, "utf8");
-  console.log(`\n✓ Created Aptos CLI config at ${configPath}`);
+  // Create Movement CLI config
+  const movementConfigDir = path.join(os.homedir(), ".movement");
+  fs.mkdirSync(movementConfigDir, { recursive: true });
+  const movementConfigPath = path.join(movementConfigDir, "config.yaml");
+  fs.writeFileSync(movementConfigPath, configContent, "utf8");
+  console.log(`\n✓ Created Movement CLI config at ${movementConfigPath}`);
 
-  // Step 1: Compile the contract
+  // Also create Aptos CLI config for backwards compatibility
+  const aptosConfigDir = path.join(os.homedir(), ".aptos");
+  fs.mkdirSync(aptosConfigDir, { recursive: true });
+  const aptosConfigPath = path.join(aptosConfigDir, "config.yaml");
+  fs.writeFileSync(aptosConfigPath, configContent, "utf8");
+  console.log(`✓ Created Aptos CLI config at ${aptosConfigPath}`);
+
+  // Step 1: Compile the contract (no --profile needed with default)
   console.log("\n========================================");
   console.log("  Step 1: Compiling Contract");
   console.log("========================================");
 
-  try {
-    runCommand("aptos", [
-      "move", "compile",
-      "--package-dir", contractsDir,
-      "--named-addresses", `prediction_market=${moduleAddress}`,
-      "--profile", "movement",
-    ], repoRoot);
-    console.log("✓ Compilation successful");
-  } catch (error) {
-    console.error("✗ Compilation failed");
-    throw error;
+  // Clean build directory first
+  const buildDir = path.join(contractsDir, "build");
+  if (fs.existsSync(buildDir)) {
+    fs.rmSync(buildDir, { recursive: true });
+    console.log("✓ Cleaned build directory");
   }
 
-  // Step 2: Run tests
+  // Try without bytecode-version flag first (use default), or use version 7 for #[view] support
+  let result = runCommand("movement", [
+    "move", "compile",
+    "--package-dir", contractsDir,
+    "--named-addresses", `prediction_market=${moduleAddress}`,
+    // Removed --bytecode-version to use CLI default (supports #[view] attributes)
+  ], repoRoot);
+
+  if (!result.success) {
+    console.error("✗ Compilation failed");
+    throw new Error("Compilation failed");
+  }
+  console.log("✓ Compilation successful");
+
+  // Step 2: Run tests (optional, don't fail on test errors)
   console.log("\n========================================");
   console.log("  Step 2: Running Tests");
   console.log("========================================");
 
-  try {
-    runCommand("aptos", [
-      "move", "test",
-      "--package-dir", contractsDir,
-      "--named-addresses", `prediction_market=${moduleAddress}`,
-      "--profile", "movement",
-    ], repoRoot);
+  result = runCommand("movement", [
+    "move", "test",
+    "--package-dir", contractsDir,
+    "--named-addresses", `prediction_market=${moduleAddress}`,
+  ], repoRoot);
+
+  if (result.success) {
     console.log("✓ Tests passed");
-  } catch (error) {
-    console.warn("⚠ Tests failed, continuing with deployment...");
+  } else {
+    console.warn("⚠ Tests failed or skipped, continuing with deployment...");
   }
 
   // Step 3: Publish the contract
@@ -139,19 +170,42 @@ ${movementFaucetUrl ? `    faucet_url: "${movementFaucetUrl}"` : ""}
   console.log("  Step 3: Publishing Contract");
   console.log("========================================");
 
-  try {
-    runCommand("aptos", [
-      "move", "publish",
-      "--package-dir", contractsDir,
-      "--named-addresses", `prediction_market=${moduleAddress}`,
-      "--profile", "movement",
-      "--assume-yes",
-    ], repoRoot);
-    console.log("✓ Contract published successfully");
-  } catch (error) {
-    console.error("✗ Publishing failed");
-    throw error;
+  result = runCommand("movement", [
+    "move", "publish",
+    "--package-dir", contractsDir,
+    "--named-addresses", `prediction_market=${moduleAddress}`,
+    "--private-key", movementPrivateKeyHex,
+    "--url", movementRpcUrl,
+    "--assume-yes",
+    // Removed --bytecode-version to use CLI default (supports #[view] attributes)
+  ], repoRoot);
+
+  if (!result.success) {
+    console.error("\n✗ Publishing failed!");
+
+    const output = result.stdout + result.stderr;
+
+    // Detect specific errors and give targeted advice
+    if (output.includes("Unable to find config") || output.includes("config.yaml")) {
+      console.error("\n❌ Movement CLI config not found.");
+      console.error("The script should have created ~/.movement/config.yaml automatically.");
+      console.error("If this persists, try running: movement init");
+    } else if (output.includes("DESERIALIZATION_ERROR") || output.includes("LINKER_ERROR")) {
+      console.error("\nThis is likely due to bytecode version incompatibility with Movement testnet.");
+      console.error("Try these solutions:");
+      console.error("1. Check Move.toml uses a compatible AptosFramework version");
+      console.error("2. Try adding --bytecode-version 6 flag");
+      console.error("3. Clear cache with: rm -rf ~/.move");
+    } else if (output.includes("INSUFFICIENT_BALANCE") || output.includes("insufficient")) {
+      console.error("\n❌ Insufficient balance in your wallet.");
+      console.error("Get testnet tokens from: https://faucet.testnet.movementnetwork.xyz");
+    } else {
+      console.error("\nUnknown error. Check the output above for details.");
+    }
+
+    throw new Error("Contract publishing failed - see errors above");
   }
+  console.log("✓ Contract published successfully");
 
   // Step 4: Check if MarketRegistry exists, if not initialize
   console.log("\n========================================");
@@ -176,19 +230,18 @@ ${movementFaucetUrl ? `    faucet_url: "${movementFaucetUrl}"` : ""}
   }
 
   if (!initialized) {
-    try {
-      runCommand("aptos", [
-        "move", "run",
-        "--function-id", `${moduleAddress}::market::initialize`,
-        "--args", `hex:${seedHex}`,
-        "--profile", "movement",
-        "--assume-yes",
-      ], repoRoot);
-      console.log("✓ MarketRegistry initialized");
-    } catch (error) {
+    result = runCommand("movement", [
+      "move", "run",
+      "--function-id", `${moduleAddress}::market::initialize`,
+      "--args", `hex:${seedHex}`,
+      "--assume-yes",
+    ], repoRoot);
+
+    if (!result.success) {
       console.error("✗ Initialization failed");
-      throw error;
+      throw new Error("MarketRegistry initialization failed");
     }
+    console.log("✓ MarketRegistry initialized");
   }
 
   // Step 5: Get resource address and save deployment manifest

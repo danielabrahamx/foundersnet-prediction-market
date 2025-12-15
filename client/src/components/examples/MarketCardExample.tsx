@@ -13,7 +13,7 @@ const mockMarket: MarketDisplay = {
   volume24h: 2450,
   resolved: false,
   winningOutcome: false,
-  expiryTimestamp: Date.now() + 120 * 24 * 60 * 60 * 1000,
+  expiryTimestamp: Math.floor(Date.now() / 1000) + 120 * 24 * 60 * 60, // Unix seconds
   timeUntilExpiry: "120d 0h",
 };
 

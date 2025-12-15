@@ -1,14 +1,27 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { CONTRACT_CONFIG } from "@/config/contracts";
 import { useWallet as useAptosWallet } from "@aptos-labs/wallet-adapter-react";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+
+// Initialize Aptos client for Movement testnet
+const aptosConfig = new AptosConfig({
+  network: Network.CUSTOM,
+  fullnode: "https://testnet.movementnetwork.xyz/v1",
+});
+const aptosClient = new Aptos(aptosConfig);
+
+// MOVE token has 8 decimals (same as APT)
+const OCTAS_PER_MOVE = 100_000_000;
 
 interface WalletContextType {
   connected: boolean;
   address: string | null;
   balance: number;
   isAdmin: boolean;
+  isLoadingBalance: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
+  refreshBalance: () => Promise<void>;
   signAndSubmitTransaction: (payload: unknown) => Promise<{ hash: string }>;
 }
 
@@ -29,18 +42,61 @@ interface WalletProviderProps {
 export function WalletProvider({ children }: WalletProviderProps) {
   const aptosWallet = useAptosWallet();
   const [balance, setBalance] = useState(0);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   const connected = aptosWallet.connected;
   const address = aptosWallet.account?.address?.toString() || null;
   const isAdmin = address?.toLowerCase() === CONTRACT_CONFIG.adminAddress.toLowerCase();
 
+  // Fetch real balance from Movement blockchain
+  const fetchBalance = useCallback(async (walletAddress: string) => {
+    setIsLoadingBalance(true);
+    try {
+      console.log(`Fetching balance for ${walletAddress}...`);
+      const accountBalance = await aptosClient.getAccountAPTAmount({
+        accountAddress: walletAddress,
+      });
+      // Convert from octas to MOVE (8 decimals)
+      const moveBalance = accountBalance / OCTAS_PER_MOVE;
+      console.log(`Balance: ${accountBalance} octas = ${moveBalance} MOVE`);
+      setBalance(moveBalance);
+    } catch (error: unknown) {
+      console.error("Failed to fetch balance:", error);
+      // Check if account doesn't exist yet (not funded)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("not found") || errorMessage.includes("Account not found")) {
+        console.warn("Account not found on chain - may need to be funded first");
+        setBalance(0);
+      } else {
+        setBalance(0);
+      }
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  }, []);
+
+  // Refresh balance function for external use
+  const refreshBalance = useCallback(async () => {
+    if (address) {
+      await fetchBalance(address);
+    }
+  }, [address, fetchBalance]);
+
+  // Fetch balance when wallet connects or address changes
   useEffect(() => {
-    if (connected) {
-      setBalance(1000);
+    if (connected && address) {
+      fetchBalance(address);
+
+      // Also set up periodic refresh every 30 seconds
+      const intervalId = setInterval(() => {
+        fetchBalance(address);
+      }, 30000);
+
+      return () => clearInterval(intervalId);
     } else {
       setBalance(0);
     }
-  }, [connected]);
+  }, [connected, address, fetchBalance]);
 
   const connect = useCallback(async () => {
     try {
@@ -99,12 +155,18 @@ export function WalletProvider({ children }: WalletProviderProps) {
       // Use the real wallet adapter signAndSubmitTransaction
       const response = await aptosWallet.signAndSubmitTransaction(payload as Parameters<typeof aptosWallet.signAndSubmitTransaction>[0]);
       console.log("Transaction submitted:", response);
+
+      // Refresh balance after transaction
+      if (address) {
+        setTimeout(() => fetchBalance(address), 2000);
+      }
+
       return { hash: response.hash };
     } catch (error) {
       console.error("Transaction failed:", error);
       throw error;
     }
-  }, [connected, aptosWallet]);
+  }, [connected, aptosWallet, address, fetchBalance]);
 
   return (
     <WalletContext.Provider
@@ -113,8 +175,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
         address,
         balance,
         isAdmin,
+        isLoadingBalance,
         connect,
         disconnect,
+        refreshBalance,
         signAndSubmitTransaction,
       }}
     >

@@ -21,6 +21,8 @@ export interface MarketDisplay {
   yesPriceUsd: number;
   noPriceUsd: number;
   totalLiquidity: number;
+  yesPool: number;
+  noPool: number;
   volume24h: number;
   resolved: boolean;
   winningOutcome: boolean;
@@ -48,9 +50,13 @@ export interface UserPositionDisplay {
   currentValue: number;
   unrealizedPnl: number;
   unrealizedPnlPercent: number;
+  potentialPnl: number;
+  potentialPnlPercent: number;
   resolved: boolean;
   claimable: boolean;
   claimableAmount: number;
+  isWinner?: boolean;      // Whether the user won this bet (true for winners, even after claiming)
+  hasClaimed?: boolean;    // Whether the user has already claimed their winnings
 }
 
 export interface TradeEstimate {

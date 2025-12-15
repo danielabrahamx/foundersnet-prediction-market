@@ -4,11 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangle, Loader2, CheckCircle } from "lucide-react";
+import { Loader2, CheckCircle } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useMarkets } from "@/contexts/MarketContext";
 import type { MarketDisplay, TransactionState } from "@/types/market";
-import { calculateBuyYes, calculateBuyNo } from "@/services/amm";
 import { useToast } from "@/hooks/use-toast";
 
 interface TradeFormProps {
@@ -26,16 +25,24 @@ export function TradeForm({ market }: TradeFormProps) {
   const position = getPosition(market.id);
   const numAmount = parseFloat(amount) || 0;
 
-  const estimate = useMemo(() => {
-    if (numAmount <= 0) return null;
+  // Get pool sizes from market for potential payout calculation
+  const yesPool = (market as any).yesPool || market.totalLiquidity / 2;
+  const noPool = (market as any).noPool || market.totalLiquidity / 2;
+  const totalPool = yesPool + noPool;
 
-    const yesPool = market.totalLiquidity * (market.noPriceBps / 10000);
-    const noPool = market.totalLiquidity * (market.yesPriceBps / 10000);
+  // Calculate potential payout based on current pool sizes
+  const potentialPayout = useMemo(() => {
+    if (numAmount <= 0) return 0;
+    const newYesPool = tradeType === "YES" ? yesPool + numAmount : yesPool;
+    const newNoPool = tradeType === "NO" ? noPool + numAmount : noPool;
+    const newTotalPool = newYesPool + newNoPool;
 
-    return tradeType === "YES"
-      ? calculateBuyYes(yesPool, noPool, numAmount)
-      : calculateBuyNo(yesPool, noPool, numAmount);
-  }, [numAmount, tradeType, market]);
+    // Payout = (totalPool / winningPool) * userBet
+    const winningPool = tradeType === "YES" ? newYesPool : newNoPool;
+    return winningPool > 0 ? (newTotalPool / winningPool) * numAmount : 0;
+  }, [numAmount, tradeType, yesPool, noPool]);
+
+  const potentialProfit = potentialPayout - numAmount;
 
   const handleTrade = async () => {
     if (!connected) {
@@ -58,8 +65,8 @@ export function TradeForm({ market }: TradeFormProps) {
       await executeTrade(market.id, tradeType, numAmount);
       setTxState({ status: "confirmed" });
       toast({
-        title: "Trade executed",
-        description: `Successfully bought ${estimate?.tokensOut.toFixed(2)} ${tradeType} tokens`,
+        title: "Bet placed successfully!",
+        description: `You bet ${numAmount} MOVE on ${tradeType}`,
       });
       setAmount("");
       setTimeout(() => setTxState({ status: "idle" }), 3000);
@@ -125,7 +132,7 @@ export function TradeForm({ market }: TradeFormProps) {
           <TabsContent value={tradeType} className="space-y-4 mt-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="amount">Amount (APT)</Label>
+                <Label htmlFor="amount">Amount (MOVE)</Label>
                 <button
                   type="button"
                   onClick={handleMaxClick}
@@ -146,34 +153,43 @@ export function TradeForm({ market }: TradeFormProps) {
               />
             </div>
 
-            {estimate && numAmount > 0 && (
-              <Card className="bg-muted/50">
+            {numAmount > 0 && (
+              <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-primary/20">
                 <CardContent className="p-3 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Estimated tokens</span>
+                    <span className="text-muted-foreground">Your bet</span>
                     <span className="font-mono font-semibold">
-                      {estimate.tokensOut.toFixed(2)} {tradeType}
+                      {numAmount.toFixed(2)} MOVE on {tradeType}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Average price</span>
+                    <span className="text-muted-foreground">Current {tradeType} pool</span>
                     <span className="font-mono">
-                      ${estimate.averagePrice.toFixed(4)}
+                      {(tradeType === "YES" ? yesPool : noPool).toFixed(2)} MOVE
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Fee (2%)</span>
-                    <span className="font-mono">{estimate.fee.toFixed(2)} APT</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Price impact</span>
-                    <span className={`font-mono ${estimate.priceImpactBps > 500 ? "text-no" : ""}`}>
-                      {(estimate.priceImpactBps / 100).toFixed(2)}%
-                      {estimate.priceImpactBps > 500 && (
-                        <AlertTriangle className="inline h-3 w-3 ml-1" />
-                      )}
+                    <span className="text-muted-foreground">Total pool</span>
+                    <span className="font-mono">
+                      {(totalPool + numAmount).toFixed(2)} MOVE
                     </span>
                   </div>
+                  <hr className="border-primary/20" />
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span className="text-muted-foreground">Potential payout (if {tradeType} wins)</span>
+                    <span className="font-mono text-yes">
+                      {potentialPayout.toFixed(2)} MOVE
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Potential profit</span>
+                    <span className="font-mono text-yes">
+                      +{potentialProfit.toFixed(2)} MOVE ({((potentialProfit / numAmount) * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Parimutuel betting: No price impact, payouts determined at resolution
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -209,22 +225,27 @@ export function TradeForm({ market }: TradeFormProps) {
             <p className="text-sm font-medium mb-2">Your Position</p>
             <div className="grid grid-cols-2 gap-2 text-sm">
               {position.yesTokens > 0 && (
-                <div className="bg-yes/10 rounded-md p-2">
-                  <p className="text-xs text-muted-foreground">YES Tokens</p>
+                <div className="bg-yes/10 rounded-md p-2 border border-yes/20">
+                  <p className="text-xs text-muted-foreground">YES Bet</p>
                   <p className="font-mono font-semibold text-yes">
-                    {position.yesTokens.toFixed(2)}
+                    {position.yesTokens.toFixed(2)} MOVE
                   </p>
                 </div>
               )}
               {position.noTokens > 0 && (
-                <div className="bg-no/10 rounded-md p-2">
-                  <p className="text-xs text-muted-foreground">NO Tokens</p>
+                <div className="bg-no/10 rounded-md p-2 border border-no/20">
+                  <p className="text-xs text-muted-foreground">NO Bet</p>
                   <p className="font-mono font-semibold text-no">
-                    {position.noTokens.toFixed(2)}
+                    {position.noTokens.toFixed(2)} MOVE
                   </p>
                 </div>
               )}
             </div>
+            {position.potentialPnl > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Potential profit if you win: <span className="text-yes font-mono">+{position.potentialPnl.toFixed(2)} MOVE</span>
+              </p>
+            )}
           </div>
         )}
       </CardContent>

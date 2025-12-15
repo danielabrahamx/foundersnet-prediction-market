@@ -39,7 +39,7 @@ export function AdminDashboard() {
   const [newMarket, setNewMarket] = useState({
     name: "",
     description: "",
-    liquidity: 1000,
+    liquidity: 0.1,
     expiryDays: 30,
   });
 
@@ -73,12 +73,13 @@ export function AdminDashboard() {
         description: `Successfully created market: ${newMarket.name}`,
       });
 
-      setNewMarket({ name: "", description: "", liquidity: 1000, expiryDays: 30 });
+      setNewMarket({ name: "", description: "", liquidity: 0.1, expiryDays: 30 });
       setCreateDialogOpen(false);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Create market error:", error);
       toast({
         title: "Failed to create market",
-        description: "Please try again.",
+        description: error?.message || "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -169,7 +170,7 @@ export function AdminDashboard() {
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Treasury Balance</p>
             <p className="text-2xl font-mono font-bold" data-testid="text-treasury">
-              {treasuryBalance.toLocaleString()} APT
+              {treasuryBalance.toLocaleString()} MOVE
             </p>
           </CardContent>
         </Card>
@@ -221,7 +222,7 @@ export function AdminDashboard() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="liquidity">Initial Liquidity (APT)</Label>
+                      <Label htmlFor="liquidity">Initial Liquidity (MOVE)</Label>
                       <Input
                         id="liquidity"
                         type="number"
@@ -349,7 +350,7 @@ export function AdminDashboard() {
           <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-md">
             <div>
               <p className="text-sm text-muted-foreground">Available Balance</p>
-              <p className="font-mono font-semibold text-lg">{treasuryBalance.toLocaleString()} APT</p>
+              <p className="font-mono font-semibold text-lg">{treasuryBalance.toLocaleString()} MOVE</p>
             </div>
             <Button variant="outline" disabled data-testid="button-withdraw">
               <Wallet className="h-4 w-4 mr-2" />

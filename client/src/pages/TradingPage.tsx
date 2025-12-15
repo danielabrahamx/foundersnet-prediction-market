@@ -67,33 +67,39 @@ export default function TradingPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-yes/10 rounded-md p-3 text-center">
+                <div className="bg-yes/10 rounded-md p-3 text-center border border-yes/20">
                   <p className="text-xs text-muted-foreground mb-1">YES Price</p>
                   <p className="font-mono font-bold text-yes text-xl">
-                    ${market.yesPriceUsd.toFixed(2)}
+                    $0.50
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {(market.yesPriceBps / 100).toFixed(0)}% probability
+                    50% chance
+                  </p>
+                  <p className="text-xs text-yes/70 mt-1 font-mono">
+                    Pool: {(market as any).yesPool?.toFixed(2) || '0'} MOVE
                   </p>
                 </div>
-                <div className="bg-no/10 rounded-md p-3 text-center">
+                <div className="bg-no/10 rounded-md p-3 text-center border border-no/20">
                   <p className="text-xs text-muted-foreground mb-1">NO Price</p>
                   <p className="font-mono font-bold text-no text-xl">
-                    ${market.noPriceUsd.toFixed(2)}
+                    $0.50
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {(market.noPriceBps / 100).toFixed(0)}% probability
+                    50% chance
+                  </p>
+                  <p className="text-xs text-no/70 mt-1 font-mono">
+                    Pool: {(market as any).noPool?.toFixed(2) || '0'} MOVE
                   </p>
                 </div>
-                <div className="rounded-md p-3 text-center bg-muted/50">
-                  <p className="text-xs text-muted-foreground mb-1 flex items-center justify-center gap-1">
+                <div className="rounded-md p-3 text-center bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/30">
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center justify-center gap-1 font-semibold">
                     <Droplets className="h-3 w-3" />
-                    Liquidity
+                    Total Liquidity
                   </p>
-                  <p className="font-mono font-semibold text-lg">
-                    {market.totalLiquidity.toLocaleString()}
+                  <p className="font-mono font-bold text-xl text-primary">
+                    {market.totalLiquidity.toFixed(2)}
                   </p>
-                  <p className="text-xs text-muted-foreground">APT</p>
+                  <p className="text-xs text-muted-foreground">MOVE</p>
                 </div>
                 <div className="rounded-md p-3 text-center bg-muted/50">
                   <p className="text-xs text-muted-foreground mb-1 flex items-center justify-center gap-1">
@@ -101,9 +107,9 @@ export default function TradingPage() {
                     24h Volume
                   </p>
                   <p className="font-mono font-semibold text-lg">
-                    {market.volume24h.toLocaleString()}
+                    {market.volume24h.toFixed(2)}
                   </p>
-                  <p className="text-xs text-muted-foreground">APT</p>
+                  <p className="text-xs text-muted-foreground">MOVE</p>
                 </div>
               </div>
             </CardContent>
@@ -111,42 +117,7 @@ export default function TradingPage() {
 
           <PriceChart priceHistory={priceHistory} currentYesPrice={market.yesPriceBps} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {[
-                  { action: "Bought", type: "YES", amount: 50, tokens: 76.9, time: "2m ago" },
-                  { action: "Bought", type: "NO", amount: 25, tokens: 71.4, time: "5m ago" },
-                  { action: "Sold", type: "YES", amount: 100, tokens: 142.8, time: "12m ago" },
-                  { action: "Bought", type: "YES", amount: 200, tokens: 285.7, time: "28m ago" },
-                ].map((activity, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between py-2 border-b last:border-0"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={
-                          activity.type === "YES"
-                            ? "bg-yes/20 text-yes border-yes/30"
-                            : "bg-no/20 text-no border-no/30"
-                        }
-                      >
-                        {activity.type}
-                      </Badge>
-                      <span className="text-sm">
-                        {activity.action} {activity.tokens.toFixed(1)} tokens for {activity.amount} APT
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{activity.time}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+
         </div>
 
         <div className="lg:w-[360px] shrink-0">

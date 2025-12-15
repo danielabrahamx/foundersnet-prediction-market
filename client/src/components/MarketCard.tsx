@@ -34,22 +34,22 @@ export function MarketCard({ market }: MarketCardProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
-            <div className="flex-1 rounded-md bg-yes/10 p-3 text-center">
+            <div className="flex-1 rounded-md bg-yes/10 p-3 text-center border border-yes/20">
               <p className="text-xs text-muted-foreground mb-1">YES</p>
               <p className="font-mono font-semibold text-yes text-lg">
-                ${market.yesPriceUsd.toFixed(2)}
+                $0.50
               </p>
               <p className="text-xs text-muted-foreground">
-                {(market.yesPriceBps / 100).toFixed(0)}%
+                50%
               </p>
             </div>
-            <div className="flex-1 rounded-md bg-no/10 p-3 text-center">
+            <div className="flex-1 rounded-md bg-no/10 p-3 text-center border border-no/20">
               <p className="text-xs text-muted-foreground mb-1">NO</p>
               <p className="font-mono font-semibold text-no text-lg">
-                ${market.noPriceUsd.toFixed(2)}
+                $0.50
               </p>
               <p className="text-xs text-muted-foreground">
-                {(market.noPriceBps / 100).toFixed(0)}%
+                50%
               </p>
             </div>
           </div>
@@ -57,7 +57,7 @@ export function MarketCard({ market }: MarketCardProps) {
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Droplets className="h-3.5 w-3.5" />
-              <span className="font-mono">{market.totalLiquidity.toLocaleString()} APT</span>
+              <span className="font-mono">{market.totalLiquidity.toLocaleString()} MOVE</span>
             </div>
             <div className="flex items-center gap-1">
               <TrendingUp className="h-3.5 w-3.5" />

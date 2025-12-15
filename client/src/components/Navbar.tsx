@@ -21,7 +21,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ theme, onToggleTheme }: NavbarProps) {
-  const { connected, address, balance, isAdmin, connect, disconnect } = useWallet();
+  const { connected, address, balance, isAdmin, isLoadingBalance, connect, disconnect } = useWallet();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -86,7 +86,13 @@ export function Navbar({ theme, onToggleTheme }: NavbarProps) {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="p-2 border-b">
                     <p className="text-sm text-muted-foreground">Balance</p>
-                    <p className="font-mono font-semibold">{balance.toLocaleString()} APT</p>
+                    <p className="font-mono font-semibold">
+                      {isLoadingBalance ? (
+                        <span className="text-muted-foreground">Loading...</span>
+                      ) : (
+                        `${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} MOVE`
+                      )}
+                    </p>
                   </div>
                   <DropdownMenuItem
                     onClick={disconnect}

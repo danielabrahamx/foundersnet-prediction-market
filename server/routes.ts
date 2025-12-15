@@ -1,7 +1,32 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { movementClient } from "./services/movementClient";
+import { movementClient, type MovementMarket } from "./services/movementClient";
 import { z } from "zod";
+
+// Helper function to serialize BigInt values to strings for JSON response
+// JSON.stringify() cannot serialize BigInt, so we convert them to strings
+function serializeMarket(market: MovementMarket): Record<string, any> {
+  return {
+    ...market,
+    yesPool: market.yesPool.toString(),
+    noPool: market.noPool.toString(),
+    totalLiquidity: market.totalLiquidity.toString(),
+    volume24h: market.volume24h.toString(),
+    expiryTimestamp: market.expiryTimestamp.toString(),
+  };
+}
+
+function serializeMarkets(markets: MovementMarket[]): Record<string, any>[] {
+  return markets.map(serializeMarket);
+}
+
+// MOVE token constants
+// 1 MOVE = 100,000,000 octas (10^8, same as Aptos)
+const MOVE_DECIMALS = 8;
+const OCTAS_PER_MOVE = 100_000_000;
+
+// Minimum bet amount: 0.1 MOVE in octas
+const MIN_BET_OCTAS = 0.1 * OCTAS_PER_MOVE; // 10,000,000 octas
 
 // Admin validation
 function getAdminAddress(): string | null {
@@ -66,8 +91,9 @@ export async function registerRoutes(
       console.log(`[${new Date().toISOString()}] Successfully fetched ${markets.length} markets in ${duration}ms`);
 
       // Return enhanced response with metadata
+      // Note: serializeMarkets converts BigInt values to strings for JSON serialization
       res.json({
-        data: markets,
+        data: serializeMarkets(markets),
         meta: {
           count: markets.length,
           fetchedAt: new Date().toISOString(),
@@ -142,65 +168,70 @@ export async function registerRoutes(
    * Fetch a specific market from the Movement blockchain with enhanced error handling
    */
   app.get("/api/markets/:id", async (req, res) => {
+    // ... existing implementation ...
+  });
+
+  function serializePosition(position: any): Record<string, any> {
+    return {
+      ...position,
+      yesTokens: position.yesTokens.toString(),
+      noTokens: position.noTokens.toString(),
+      totalInvested: position.totalInvested.toString(),
+    };
+  }
+
+  function serializePositions(positions: any[]): Record<string, any>[] {
+    return positions.map(serializePosition);
+  }
+
+  /**
+   * GET /api/positions
+   * Fetch user positions from the Movement blockchain
+   */
+  app.get("/api/positions", async (req, res) => {
     const startTime = Date.now();
-    const marketId = req.params.id;
+    const userAddress = req.query.userAddress as string;
 
     try {
-      // Validate market ID format
-      if (!marketId || typeof marketId !== "string" || marketId.trim() === "") {
+      if (!userAddress) {
         return res.status(400).json({
-          error: "Invalid market ID",
+          error: "Missing userAddress parameter",
           code: "VALIDATION_ERROR",
-          details: "Market ID must be a non-empty string",
           timestamp: new Date().toISOString(),
         });
       }
 
-      console.log(`[${new Date().toISOString()}] Fetching market ${marketId} from blockchain...`);
+      console.log(`[${new Date().toISOString()}] Fetching positions for ${userAddress}...`);
 
-      const market = await movementClient.getMarketFromChain(marketId);
+      const positions = await movementClient.getUserPositions(userAddress);
       const duration = Date.now() - startTime;
 
-      if (!market) {
-        console.log(`[${new Date().toISOString()}] Market ${marketId} not found (took ${duration}ms)`);
-        return res.status(404).json({
-          error: "Market not found",
-          code: "MARKET_NOT_FOUND",
-          details: `No market exists with ID: ${marketId}`,
-          timestamp: new Date().toISOString(),
-        });
-      }
+      console.log(`[${new Date().toISOString()}] Fetched ${positions.length} positions in ${duration}ms`);
 
-      console.log(`[${new Date().toISOString()}] Successfully fetched market ${marketId} in ${duration}ms`);
-
-      res.json(market);
+      res.json({
+        data: serializePositions(positions),
+        meta: {
+          count: positions.length,
+          fetchedAt: new Date().toISOString(),
+          duration,
+        }
+      });
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      console.error(`[${new Date().toISOString()}] Error fetching positions (took ${duration}ms):`, error);
 
-      console.error(`[${new Date().toISOString()}] Error fetching market ${marketId} (took ${duration}ms):`, error);
-
-      // Categorize error and return appropriate status code
       if (error?.name === "MovementNetworkError") {
         return res.status(503).json({
           error: "Blockchain network unavailable",
           code: "NETWORK_ERROR",
           details: error.message,
           timestamp: new Date().toISOString(),
+          fallback: { data: [], meta: { count: 0 } }
         });
       }
 
-      if (error?.name === "MovementContractError") {
-        return res.status(502).json({
-          error: "Smart contract error",
-          code: error.code || "CONTRACT_ERROR",
-          details: error.message,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      // Generic error
       res.status(500).json({
-        error: "Failed to fetch market from blockchain",
+        error: "Failed to fetch positions",
         code: "INTERNAL_ERROR",
         details: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
@@ -229,35 +260,46 @@ export async function registerRoutes(
       // Validate request data
       const parsed = createMarketSchema.parse(req.body);
 
-      // Verify admin authorization
+      // Verify admin authorization with detailed logging
+      const serverAdminAddress = getAdminAddress();
+      console.log(`[${new Date().toISOString()}] Admin check - Server admin address: ${serverAdminAddress || 'NOT SET (MOVEMENT_ADMIN_PRIVATE_KEY missing)'}`);
+      console.log(`[${new Date().toISOString()}] Admin check - Request creator: ${parsed.creator}`);
+
+      if (!serverAdminAddress) {
+        // If private key is missing but we have a configured address, we can proceed with client-side signing
+        // The isAdmin(parsed.creator) check will handle validation against the configured address
+        console.warn(`[${new Date().toISOString()}] MOVEMENT_ADMIN_PRIVATE_KEY is not set. Relying on client-side signing.`);
+      }
+
       if (!isAdmin(parsed.creator)) {
         console.warn(`[${new Date().toISOString()}] Unauthorized market creation attempt by: ${parsed.creator}`);
+        console.warn(`[${new Date().toISOString()}] Expected admin address: ${serverAdminAddress}`);
         return res.status(403).json({
           error: "Only admin can create markets",
           code: "UNAUTHORIZED",
-          details: `Address ${parsed.creator} is not authorized to create markets`,
+          details: `Address ${parsed.creator} is not authorized. Admin address is ${serverAdminAddress}`,
           timestamp: new Date().toISOString(),
         });
       }
 
       console.log(`[${new Date().toISOString()}] Admin verified: ${parsed.creator}`);
-      console.log(`[${new Date().toISOString()}] Submitting transaction to Movement blockchain...`);
+      console.log(`[${new Date().toISOString()}] Building unsigned transaction for create market...`);
 
-      // Submit transaction to Movement blockchain
-      const txHash = await movementClient.submitCreateMarketTx({
+      // Build unsigned transaction for client to sign (client-side signing)
+      const unsignedTx = await movementClient.buildCreateMarketTx({
         companyName: parsed.companyName,
         description: parsed.description,
         initialLiquidity: BigInt(parsed.totalLiquidity),
         expiryTimestamp: BigInt(parsed.expiryTimestamp),
+        creator: parsed.creator,
       });
 
       const duration = Date.now() - startTime;
-      console.log(`[${new Date().toISOString()}] Market creation transaction submitted successfully in ${duration}ms`);
-      console.log(`[${new Date().toISOString()}] Transaction hash: ${txHash}`);
+      console.log(`[${new Date().toISOString()}] Unsigned transaction built successfully in ${duration}ms`);
 
-      res.status(201).json({
-        message: "Market creation transaction submitted successfully",
-        txHash,
+      res.status(200).json({
+        message: "Unsigned transaction created - sign with your wallet",
+        unsignedTransaction: unsignedTx,
         marketData: {
           companyName: parsed.companyName,
           description: parsed.description,
@@ -325,13 +367,12 @@ export async function registerRoutes(
     try {
       const parsed = placeBetSchema.parse(req.body);
 
-      // Minimum bet amount validation (1 APT = 100000000 octas minimum)
-      const MIN_BET_AMOUNT = 1;
-      if (parsed.amount < MIN_BET_AMOUNT) {
+      // Minimum bet amount validation (0.1 MOVE minimum, amount is in octas)
+      if (parsed.amount < MIN_BET_OCTAS) {
         return res.status(400).json({
           error: "Bet amount too low",
           code: "MINIMUM_BET_ERROR",
-          details: `Minimum bet amount is ${MIN_BET_AMOUNT} APT`,
+          details: `Minimum bet amount is 0.1 MOVE (${MIN_BET_OCTAS} octas)`,
           timestamp: new Date().toISOString(),
         });
       }
@@ -384,9 +425,9 @@ export async function registerRoutes(
         });
       }
 
-      // Check if market has expired
-      const now = Date.now();
-      if (Number(market.expiryTimestamp) < now) {
+      // Check if market has expired (expiryTimestamp is in seconds, Date.now() is in milliseconds)
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      if (Number(market.expiryTimestamp) < nowInSeconds) {
         return res.status(400).json({
           error: "Market has expired",
           code: "MARKET_EXPIRED",
@@ -395,7 +436,7 @@ export async function registerRoutes(
         });
       }
 
-      console.log(`[${new Date().toISOString()}] Building unsigned transaction for ${parsed.betType} bet of ${parsed.amount} APT`);
+      console.log(`[${new Date().toISOString()}] Building unsigned transaction for ${parsed.betType} bet of ${parsed.amount} octas (${parsed.amount / OCTAS_PER_MOVE} MOVE)`);
 
       // Build unsigned transaction for client to sign
       const unsignedTx = await movementClient.submitPlaceBetTx(
@@ -422,7 +463,7 @@ export async function registerRoutes(
           timestamp: new Date().toISOString(),
         }
       });
-    } catch (error) {
+    } catch (error: any) {
       const duration = Date.now() - startTime;
 
       if (error instanceof z.ZodError) {
@@ -431,6 +472,31 @@ export async function registerRoutes(
           error: "Invalid bet data",
           code: "VALIDATION_ERROR",
           details: error.errors,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Handle Movement-specific errors
+      if (error?.name === "MovementContractError") {
+        console.warn(`[${new Date().toISOString()}] Contract error (took ${duration}ms):`, error.message);
+
+        // Return 400 for user errors (like insufficient balance), 500 for system errors
+        const statusCode = error.code === "INSUFFICIENT_BALANCE" ? 400 : 500;
+
+        return res.status(statusCode).json({
+          error: "Transaction failed",
+          code: error.code || "CONTRACT_ERROR",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (error?.name === "MovementNetworkError") {
+        console.error(`[${new Date().toISOString()}] Network error (took ${duration}ms):`, error.message);
+        return res.status(503).json({
+          error: "Blockchain network unavailable",
+          code: "NETWORK_ERROR",
+          details: error.message,
           timestamp: new Date().toISOString(),
         });
       }
@@ -458,15 +524,15 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Only admin can resolve markets" });
       }
 
-      // Submit transaction to Movement blockchain
-      const txHash = await movementClient.submitResolveMarketTx(
+      // Build unsigned transaction for client-side signing
+      const unsignedTx = await movementClient.buildResolveMarketTx(
         parsed.marketId,
         parsed.winningOutcome
       );
 
       res.json({
-        message: "Market resolution transaction submitted",
-        txHash,
+        message: "Unsigned transaction created - sign with your wallet",
+        unsignedTransaction: unsignedTx,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

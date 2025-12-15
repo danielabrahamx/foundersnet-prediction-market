@@ -23,6 +23,25 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Request body logger for debugging API calls
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    console.log(`\n━━━━━━━━━━ INCOMING REQUEST ━━━━━━━━━━`);
+    console.log(`Time: ${new Date().toISOString()}`);
+    console.log(`Method: ${req.method}`);
+    console.log(`Path: ${req.path}`);
+    console.log(`Headers: ${JSON.stringify({
+      'content-type': req.headers['content-type'],
+      'user-agent': req.headers['user-agent']
+    })}`);
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(`Body: ${JSON.stringify(req.body, null, 2)}`);
+    }
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  }
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -50,7 +69,17 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // Use a replacer function to handle BigInt serialization for logging
+        const safeStringify = (obj: any) => {
+          try {
+            return JSON.stringify(obj, (key, value) =>
+              typeof value === 'bigint' ? value.toString() : value
+            );
+          } catch (e) {
+            return '[Unable to stringify response]';
+          }
+        };
+        logLine += ` :: ${safeStringify(capturedJsonResponse)}`;
       }
 
       log(logLine);

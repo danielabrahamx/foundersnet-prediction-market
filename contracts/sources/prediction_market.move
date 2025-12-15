@@ -18,9 +18,12 @@ module prediction_market::market {
     const E_NO_WINNINGS: u64 = 7;
     const E_MARKET_EXPIRED: u64 = 8;
     const E_ALREADY_INITIALIZED: u64 = 9;
+    const E_POSITION_ALREADY_EXISTS: u64 = 10;
 
-    const FEE_BPS: u64 = 200;
     const BPS_BASE: u64 = 10000;
+    
+    // Hardcoded admin address as per user requirement
+    const ADMIN_ADDR: address = @0xf111021255abd6e2cc41dc34055cebb8ad104f4034868d45ac9b1059ecb01a91;
 
     struct MarketCreatedEvent has drop, store {
         market_id: u64,
@@ -36,10 +39,7 @@ module prediction_market::market {
         market_id: u64,
         trader: address,
         is_yes: bool,
-        amount_in: u64,
-        fee: u64,
-        amount_after_fee: u64,
-        tokens_out: u64,
+        amount: u64,
         yes_pool: u64,
         no_pool: u64,
         timestamp: u64,
@@ -135,7 +135,8 @@ module prediction_market::market {
         let registry = borrow_global_mut<MarketRegistry>(registry_addr);
         let creator_addr = signer::address_of(creator);
 
-        assert!(creator_addr == registry.admin, E_NOT_ADMIN);
+        // Check against hardcoded admin address OR registry admin (for backward compatibility)
+        assert!(creator_addr == ADMIN_ADDR || creator_addr == registry.admin, E_NOT_ADMIN);
 
         let resource_addr = account::get_signer_capability_address(&registry.signer_cap);
         let coins = coin::withdraw<AptosCoin>(creator, initial_liquidity);
@@ -210,59 +211,39 @@ module prediction_market::market {
         assert!(!market.resolved, E_MARKET_RESOLVED);
         assert!(timestamp::now_seconds() < market.expiry_timestamp, E_MARKET_EXPIRED);
 
-        let fee = (amount * FEE_BPS) / BPS_BASE;
-        let amount_after_fee = amount - fee;
-        registry.treasury = registry.treasury + fee;
-
-        let tokens_out = if (is_yes) {
-            let k = market.yes_pool * market.no_pool;
-            let new_no_pool = market.no_pool + amount_after_fee;
-            let new_yes_pool = k / new_no_pool;
-            let tokens = market.yes_pool - new_yes_pool;
-            market.yes_pool = new_yes_pool;
-            market.no_pool = new_no_pool;
-            tokens
-        } else {
-            let k = market.yes_pool * market.no_pool;
-            let new_yes_pool = market.yes_pool + amount_after_fee;
-            let new_no_pool = k / new_yes_pool;
-            let tokens = market.no_pool - new_no_pool;
-            market.no_pool = new_no_pool;
-            market.yes_pool = new_yes_pool;
-            tokens
-        };
-
-        market.total_liquidity = market.total_liquidity + amount_after_fee;
-
         let trader_addr = signer::address_of(trader);
-        let resource_addr = account::get_signer_capability_address(&registry.signer_cap);
-        let coins = coin::withdraw<AptosCoin>(trader, amount);
-        coin::deposit(resource_addr, coins);
 
+        // Position Check: strict one bet per user per market
         if (!exists<Position>(trader_addr)) {
             move_to(trader, Position { positions: table::new() });
         };
 
         let position_store = borrow_global_mut<Position>(trader_addr);
-        if (!table::contains(&position_store.positions, market_id)) {
-            table::add(
-                &mut position_store.positions,
-                market_id,
-                UserPosition {
-                    yes_tokens: 0,
-                    no_tokens: 0,
-                    total_invested: 0,
-                },
-            );
-        };
+        assert!(!table::contains(&position_store.positions, market_id), E_POSITION_ALREADY_EXISTS);
 
-        let user_pos = table::borrow_mut(&mut position_store.positions, market_id);
+        // Update Pools (Parimutuel: simply add to the pool)
         if (is_yes) {
-            user_pos.yes_tokens = user_pos.yes_tokens + tokens_out;
+            market.yes_pool = market.yes_pool + amount;
         } else {
-            user_pos.no_tokens = user_pos.no_tokens + tokens_out;
+            market.no_pool = market.no_pool + amount;
         };
-        user_pos.total_invested = user_pos.total_invested + amount;
+        market.total_liquidity = market.total_liquidity + amount;
+
+        // Transfer funds
+        let resource_addr = account::get_signer_capability_address(&registry.signer_cap);
+        let coins = coin::withdraw<AptosCoin>(trader, amount);
+        coin::deposit(resource_addr, coins);
+
+        // Create Position
+        table::add(
+            &mut position_store.positions,
+            market_id,
+            UserPosition {
+                yes_tokens: if (is_yes) { amount } else { 0 },
+                no_tokens: if (is_yes) { 0 } else { amount },
+                total_invested: amount,
+            },
+        );
 
         event::emit_event(
             &mut registry.trade_events,
@@ -270,10 +251,7 @@ module prediction_market::market {
                 market_id,
                 trader: trader_addr,
                 is_yes,
-                amount_in: amount,
-                fee,
-                amount_after_fee,
-                tokens_out,
+                amount,
                 yes_pool: market.yes_pool,
                 no_pool: market.no_pool,
                 timestamp: timestamp::now_seconds(),
@@ -290,7 +268,8 @@ module prediction_market::market {
         let registry = borrow_global_mut<MarketRegistry>(registry_addr);
         let admin_addr = signer::address_of(admin);
 
-        assert!(admin_addr == registry.admin, E_NOT_ADMIN);
+        // Check against hardcoded admin address OR registry admin
+        assert!(admin_addr == ADMIN_ADDR || admin_addr == registry.admin, E_NOT_ADMIN);
         assert!(table::contains(&registry.markets, market_id), E_MARKET_NOT_FOUND);
 
         let market = table::borrow_mut(&mut registry.markets, market_id);
@@ -330,26 +309,31 @@ module prediction_market::market {
 
         let user_pos = table::borrow_mut(&mut position_store.positions, market_id);
 
-        let winning_tokens = if (market.winning_outcome) {
-            user_pos.yes_tokens
+        let (winning_shares, winning_pool_total) = if (market.winning_outcome) {
+            (user_pos.yes_tokens, market.yes_pool)
         } else {
-            user_pos.no_tokens
+            (user_pos.no_tokens, market.no_pool)
         };
 
-        assert!(winning_tokens > 0, E_NO_WINNINGS);
+        assert!(winning_shares > 0, E_NO_WINNINGS);
+
+        // Parimutuel Payout = (UserShares / WinningPoolTotal) * TotalMarketLiquidity
+        // Use u128 for calculation to prevent overflow
+        let payout = (((winning_shares as u128) * (market.total_liquidity as u128)) / (winning_pool_total as u128));
+        let payout_u64 = (payout as u64);
 
         user_pos.yes_tokens = 0;
         user_pos.no_tokens = 0;
 
         let resource_signer = account::create_signer_with_capability(&registry.signer_cap);
-        coin::transfer<AptosCoin>(&resource_signer, claimer_addr, winning_tokens);
+        coin::transfer<AptosCoin>(&resource_signer, claimer_addr, payout_u64);
 
         event::emit_event(
             &mut registry.winnings_claimed_events,
             WinningsClaimedEvent {
                 market_id,
                 claimer: claimer_addr,
-                amount: winning_tokens,
+                amount: payout_u64,
                 timestamp: timestamp::now_seconds(),
             },
         );
@@ -432,13 +416,10 @@ module prediction_market::market {
     }
 
     #[view]
-    public fun get_prices_bps(registry_addr: address, market_id: u64): (u64, u64) acquires MarketRegistry {
-        let registry = borrow_global<MarketRegistry>(registry_addr);
-        let market = table::borrow(&registry.markets, market_id);
-        let total = market.yes_pool + market.no_pool;
-        let yes_price_bps = (market.no_pool * BPS_BASE) / total;
-        let no_price_bps = BPS_BASE - yes_price_bps;
-        (yes_price_bps, no_price_bps)
+    public fun get_prices_bps(_registry_addr: address, _market_id: u64): (u64, u64) {
+        // Pure parimutuel model: prices are always 50/50
+        // Winners split losers' pool proportionally based on their share
+        (5000, 5000)
     }
 
     #[view]
@@ -458,11 +439,9 @@ module prediction_market::market {
     }
 
     #[view]
-    public fun get_yes_price_bps(registry_addr: address, market_id: u64): u64 acquires MarketRegistry {
-        let registry = borrow_global<MarketRegistry>(registry_addr);
-        let market = table::borrow(&registry.markets, market_id);
-        let total = market.yes_pool + market.no_pool;
-        (market.no_pool * BPS_BASE) / total
+    public fun get_yes_price_bps(_registry_addr: address, _market_id: u64): u64 {
+        // Pure parimutuel model: YES price is always 50%
+        5000
     }
 
     #[view]
