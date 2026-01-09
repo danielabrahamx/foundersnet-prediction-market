@@ -1,12 +1,12 @@
 {
   "network": "movement-testnet",
   "rpcUrl": "https://testnet.movementnetwork.xyz/v1",
-  "packageAddress": "0x775fc8418ed98cf23cd446b90e6012f9b07502edaea56543e1bf3729d540c33b",
-  "registryAddress": "0x775fc8418ed98cf23cd446b90e6012f9b07502edaea56543e1bf3729d540c33b",
-  "resourceAddress": "0xfa0a3bab28b83ea712f5a9e22a627e21d7453e2d6d8471ad13955c7bd9e38a56",
+  "packageAddress": "0xf111021255abd6e2cc41dc34055cebb8ad104f4034868d45ac9b1059ecb01a91",
+  "registryAddress": "0xf111021255abd6e2cc41dc34055cebb8ad104f4034868d45ac9b1059ecb01a91",
+  "resourceAddress": "0x2330543a516ac1de079b42ee9a7c3507007e54cffae8d774560708170639640b5",
   "namedAddresses": {
-    "prediction_market": "0x775fc8418ed98cf23cd446b90e6012f9b07502edaea56543e1bf3729d540c33b"
+    "prediction_market": "0xf111021255abd6e2cc41dc34055cebb8ad104f4034868d45ac9b1059ecb01a91"
   },
   "resourceSeedHex": "01",
-  "publishedAt": "2025-12-14T23:07:41.536Z"
+  "publishedAt": "2026-01-08T23:01:00.000Z"
 }
