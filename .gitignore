@@ -12,3 +12,6 @@ vite.config.ts.*
 .aptos
 contracts/.aptos
 contracts/build
+
+# Files with sensitive data
+verify-address.mjs

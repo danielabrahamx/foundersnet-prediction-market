@@ -5,6 +5,8 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # Exclude public blockchain URLs and admin key from secrets scanning
+  SECRETS_SCAN_OMIT_KEYS = "MOVEMENT_RPC_URL,MOVEMENT_INDEXER_URL,MOVEMENT_FAUCET_URL,MOVEMENT_CONTRACT_ADDRESS,MOVEMENT_CHAIN_ID,MOVEMENT_RESOURCE_ACCOUNT,MOVEMENT_ADMIN_PRIVATE_KEY"
 
 # Include server files for functions to access
 [functions]
